@@ -95,12 +95,23 @@ delay_tc(int n)
 	return (1);
 }
 
+#define HV_X64_MSR_TIME_REF_COUNT	0x40000020
 void
 DELAY(int n)
 {
+	uint64_t now, end;
 
 	if (delay_tc(n))
 		return;
+//FIXME: XXX: need to find a way to do this cleanly...
+#if 1
+	now = rdmsr(HV_X64_MSR_TIME_REF_COUNT);
+	end = now + n * 10;
+
+	while (now < end)
+		now = rdmsr(HV_X64_MSR_TIME_REF_COUNT);
+#else
 
 	init_ops.early_delay(n);
+#endif
 }
