@@ -44,6 +44,10 @@
 #include <sys/malloc.h>
 #include <sys/sx.h>
 
+/* for struct ifmedia in struct hn_softc */
+#include <net/if.h>
+#include <net/if_media.h>
+
 #include <dev/hyperv/include/hyperv.h>
 
 MALLOC_DECLARE(M_NETVSC);
@@ -983,6 +987,7 @@ typedef struct {
  */
 typedef struct hn_softc {
 	struct ifnet    *hn_ifp;
+	struct ifmedia	hn_media;
 	device_t        hn_dev;
 	uint8_t         hn_unit;
 	int             hn_carrier;

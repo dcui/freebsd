@@ -217,6 +217,31 @@ static uint32_t get_transport_proto_type(struct mbuf *m_head)
 	return (ret_val);
 }
 
+static int
+hn_ifmedia_upd(struct ifnet *ifp)
+{
+	/* Ignore. */
+	return (0);
+}
+
+#define HN_MEDIATYPE  (IFM_ETHER | IFM_AUTO | IFM_FDX)
+
+static void
+hn_ifmedia_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
+{
+	hn_softc_t *sc = ifp->if_softc;
+
+	ifmr->ifm_status = IFM_AVALID;
+	ifmr->ifm_active = IFM_ETHER;
+
+	NV_LOCK(sc);
+	if (sc->hn_if_flags & IFF_UP) {
+		ifmr->ifm_status |= IFM_ACTIVE;
+		ifmr->ifm_active |= HN_MEDIATYPE;
+	}
+	NV_UNLOCK(sc);
+}
+
 /* {F8615163-DF3E-46c5-913F-F2D2F965ED0E} */
 static const hv_guid g_net_vsc_device_type = {
 	.data = {0x63, 0x51, 0x61, 0xF8, 0x3E, 0xDF, 0xc5, 0x46,
@@ -293,6 +318,10 @@ netvsc_attach(device_t dev)
 	ifp->if_snd.ifq_drv_maxlen = 511;
 	IFQ_SET_READY(&ifp->if_snd);
 
+	ifmedia_init(&sc->hn_media, 0, hn_ifmedia_upd, hn_ifmedia_sts);
+	ifmedia_add(&sc->hn_media, HN_MEDIATYPE, 0, NULL);
+	ifmedia_set(&sc->hn_media, HN_MEDIATYPE);
+
 	/*
 	 * Tell upper layers that we support full VLAN capability.
 	 */
@@ -332,6 +361,8 @@ netvsc_attach(device_t dev)
 static int
 netvsc_detach(device_t dev)
 {
+	hn_softc_t *sc = device_get_softc(dev);
+
 	struct hv_device *hv_device = vmbus_get_devctx(dev); 
 
 	if (bootverbose)
@@ -349,6 +380,8 @@ netvsc_detach(device_t dev)
 	 */
 
 	hv_rf_on_device_remove(hv_device, HV_RF_NV_DESTROY_CHANNEL);
+
+	ifmedia_removeall(&sc->hn_media);
 
 	return (0);
 }
@@ -1122,7 +1155,7 @@ hn_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		/* FALLTHROUGH */
 	case SIOCSIFMEDIA:
 	case SIOCGIFMEDIA:
-		error = EINVAL;
+		error = ifmedia_ioctl(ifp, ifr, &sc->hn_media, cmd);
 		break;
 	default:
 		error = ether_ioctl(ifp, cmd, data);
