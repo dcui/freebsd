@@ -615,10 +615,15 @@ ksprintn(char *nbuf, uintmax_t num, int base, int *lenp, int upper)
  *		("%6D", ptr, ":")   -> XX:XX:XX:XX:XX:XX
  *		("%*D", len, ptr, " " -> XX XX XX XX ...
  */
+
+#define HV_X64_MSR_TIME_REF_COUNT      0x40000020
+
 int
 kvprintf(char const *fmt, void (*func)(int, void*), void *arg, int radix, va_list ap)
 {
 #define PCHAR(c) {int cc=(c); if (func) (*func)(cc,arg); else *d++ = cc; retval++; }
+	uint64_t now = rdmsr(HV_X64_MSR_TIME_REF_COUNT);
+	//char prefix[MAXNBUF * 2 + 4], second[MAXNBUF], frac[MAXNBUF];
 	char nbuf[MAXNBUF];
 	char *d;
 	const char *p, *percent, *q;
@@ -636,6 +641,18 @@ kvprintf(char const *fmt, void (*func)(int, void*), void *arg, int radix, va_lis
 		d = (char *) arg;
 	else
 		d = NULL;
+
+	PCHAR('[');
+
+	for (q = ksprintn(nbuf,  now / 10000000, 10, NULL, 0); *q;)
+		PCHAR(*q--);
+
+	PCHAR('.');
+
+	for (q = ksprintn(nbuf,  now % 10000000, 10, NULL, 0); *q;)
+		PCHAR(*q--);
+
+	PCHAR(']');
 
 	if (fmt == NULL)
 		fmt = "(fmt null)\n";

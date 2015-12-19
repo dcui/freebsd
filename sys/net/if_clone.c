@@ -419,9 +419,11 @@ if_clone_simple(const char *name, ifcs_create_t create, ifcs_destroy_t destroy,
 
 		snprintf(name, IFNAMSIZ, "%s%d", ifc->ifc_name, unit);
 		error = if_clone_createif(ifc, name, IFNAMSIZ, NULL);
+#if 0
 		KASSERT(error == 0,
 		    ("%s: failed to create required interface %s",
 		    __func__, name));
+#endif
 	}
 
 	EVENTHANDLER_INVOKE(if_clone_event, ifc);

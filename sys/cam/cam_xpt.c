@@ -4425,6 +4425,9 @@ xpt_done(union ccb *done_ccb)
 	if ((done_ccb->ccb_h.func_code & XPT_FC_QUEUED) == 0)
 		return;
 
+	if (cam_num_doneqs == 0)
+		return;
+
 	hash = (done_ccb->ccb_h.path_id + done_ccb->ccb_h.target_id +
 	    done_ccb->ccb_h.target_lun) % cam_num_doneqs;
 	queue = &cam_doneqs[hash];
