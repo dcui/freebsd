@@ -70,7 +70,7 @@ hv_vmbus_connect(void) {
 
 	TAILQ_INIT(&hv_vmbus_g_connection.channel_msg_anchor);
 	mtx_init(&hv_vmbus_g_connection.channel_msg_lock, "vmbus channel msg",
-		NULL, MTX_SPIN);
+		NULL, MTX_DEF);
 
 	TAILQ_INIT(&hv_vmbus_g_connection.channel_anchor);
 	mtx_init(&hv_vmbus_g_connection.channel_lock, "vmbus channel",
@@ -151,26 +151,26 @@ hv_vmbus_connect(void) {
 	 * Add to list before we send the request since we may receive the
 	 * response before returning from this routine
 	 */
-	mtx_lock_spin(&hv_vmbus_g_connection.channel_msg_lock);
+	mtx_lock(&hv_vmbus_g_connection.channel_msg_lock);
 
 	TAILQ_INSERT_TAIL(
 		&hv_vmbus_g_connection.channel_msg_anchor,
 		msg_info,
 		msg_list_entry);
 
-	mtx_unlock_spin(&hv_vmbus_g_connection.channel_msg_lock);
+	mtx_unlock(&hv_vmbus_g_connection.channel_msg_lock);
 
 	ret = hv_vmbus_post_message(
 		msg,
 		sizeof(hv_vmbus_channel_initiate_contact));
 
 	if (ret != 0) {
-		mtx_lock_spin(&hv_vmbus_g_connection.channel_msg_lock);
+		mtx_lock(&hv_vmbus_g_connection.channel_msg_lock);
 		TAILQ_REMOVE(
 			&hv_vmbus_g_connection.channel_msg_anchor,
 			msg_info,
 			msg_list_entry);
-		mtx_unlock_spin(&hv_vmbus_g_connection.channel_msg_lock);
+		mtx_unlock(&hv_vmbus_g_connection.channel_msg_lock);
 		goto cleanup;
 	}
 
@@ -179,12 +179,12 @@ hv_vmbus_connect(void) {
 	 */
 	ret = sema_timedwait(&msg_info->wait_sema, 500); /* KYS 5 seconds */
 
-	mtx_lock_spin(&hv_vmbus_g_connection.channel_msg_lock);
+	mtx_lock(&hv_vmbus_g_connection.channel_msg_lock);
 	TAILQ_REMOVE(
 		&hv_vmbus_g_connection.channel_msg_anchor,
 		msg_info,
 		msg_list_entry);
-	mtx_unlock_spin(&hv_vmbus_g_connection.channel_msg_lock);
+	mtx_unlock(&hv_vmbus_g_connection.channel_msg_lock);
 
 	/**
 	 * Check if successful
