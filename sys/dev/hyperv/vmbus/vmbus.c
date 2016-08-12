@@ -48,6 +48,7 @@ __FBSDID("$FreeBSD$");
 #include <x86/include/apicvar.h>
 
 #include <contrib/dev/acpica/include/acpi.h>
+#include <dev/acpica/acpivar.h>
 
 #include <dev/hyperv/include/hyperv.h>
 #include <dev/hyperv/include/vmbus_xact.h>
@@ -990,6 +991,92 @@ vmbus_probe_guid_method(device_t bus, device_t dev,
 	return ENXIO;
 }
 
+#define VTPM_BASE_ADDRESS 0xfed40000
+static ACPI_STATUS
+parse_crs(ACPI_RESOURCE *res, void *ctx)
+{
+	device_t vmbus_dev = ctx;
+	UINT64 start, end;
+
+	switch (res->Type) {
+	case ACPI_RESOURCE_TYPE_ADDRESS32:
+		start = res->Data.Address32.Address.Minimum;
+		end = res->Data.Address32.Address.Maximum;
+		break;
+
+	case ACPI_RESOURCE_TYPE_ADDRESS64:
+		start = res->Data.Address64.Address.Minimum;
+		end = res->Data.Address64.Address.Maximum;
+		break;
+
+	default:
+		/* Unused resource type */
+		return AE_OK;
+	}
+
+	/*
+	 * Ignore ranges that are below 1MB, as they're not
+	 * necessary or useful here.
+	 */
+	if (end < 0x100000)
+		return AE_OK;
+
+	/* If this range overlaps the virtual TPM, truncate it. */
+	if (end >= VTPM_BASE_ADDRESS && start < VTPM_BASE_ADDRESS)
+		end = VTPM_BASE_ADDRESS;
+
+	device_printf(vmbus_dev, "got MMIO [0x%lx, 0x%lx)\n", start, end);
+
+	return AE_OK;
+}
+
+static void
+vmbus_get_crs(device_t dev, device_t vmbus_dev)
+{
+	ACPI_STATUS status;
+
+	if (bootverbose)
+		device_printf(dev, "walking _CRS\n");
+
+	status = AcpiWalkResources(acpi_get_handle(dev), "_CRS",
+			parse_crs, vmbus_dev);
+
+	if (bootverbose && ACPI_FAILURE(status))
+		device_printf(dev, "walking _CRS: failed\n");
+}
+
+static void
+vmbus_get_mmio_res(device_t dev)
+{
+	device_t acpi0, pcib0 = NULL;
+	device_t *children;
+	int i, count;
+
+	vmbus_get_crs(dev, dev);
+
+	acpi0 = device_get_parent(dev);
+	vmbus_get_crs(acpi0, dev);
+
+
+	if (device_get_children(acpi0, &children, &count) != 0)
+		return;
+
+	for (i = 0; i < count; i++) {
+		if (!device_is_attached(children[i]))
+			continue;
+
+		if (strcmp("pcib0", device_get_nameunit(children[i])))
+			continue;
+
+		pcib0 = children[i];
+		break;
+	}
+	free(children, M_TEMP);
+
+	if (pcib0)
+		vmbus_get_crs(pcib0, dev);
+}
+
 static int
 vmbus_probe(device_t dev)
 {
@@ -1026,6 +1113,9 @@ vmbus_doattach(struct vmbus_softc *sc)
 
 	if (sc->vmbus_flags & VMBUS_FLAG_ATTACHED)
 		return (0);
+
+	vmbus_get_mmio_res(sc->vmbus_dev);
+
 	sc->vmbus_flags |= VMBUS_FLAG_ATTACHED;
 
 	mtx_init(&sc->vmbus_scan_lock, "vmbus scan", NULL, MTX_DEF);
