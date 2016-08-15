@@ -991,6 +991,9 @@ vmbus_probe_guid_method(device_t bus, device_t dev,
 	return ENXIO;
 }
 
+long lo_start, lo_end;
+long hi_start, hi_end;
+
 #define VTPM_BASE_ADDRESS 0xfed40000
 static ACPI_STATUS
 parse_crs(ACPI_RESOURCE *res, void *ctx)
@@ -1026,6 +1029,14 @@ parse_crs(ACPI_RESOURCE *res, void *ctx)
 		end = VTPM_BASE_ADDRESS;
 
 	device_printf(vmbus_dev, "got MMIO [0x%lx, 0x%lx)\n", start, end);
+
+	if (start < (1L << 32)) {
+		lo_start = start;
+		lo_end = end;
+	} else {
+		hi_start = start;
+		hi_end = end;
+	}
 
 	return AE_OK;
 }
