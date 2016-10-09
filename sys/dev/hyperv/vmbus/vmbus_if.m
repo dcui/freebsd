@@ -45,3 +45,15 @@ METHOD int probe_guid {
 	device_t dev;
 	const struct hyperv_guid *guid;
 };
+
+METHOD void get_instance_guid {
+	device_t bus;
+	device_t dev;
+	struct hyperv_guid *guid;
+};
+
+METHOD uint32_t get_vcpu_id {
+	device_t bus;
+	device_t dev;
+	int cpu;
+};
