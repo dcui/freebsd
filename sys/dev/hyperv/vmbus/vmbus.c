@@ -1204,9 +1204,12 @@ vmbus_get_crs(device_t dev, device_t vmbus_dev)
 static void
 vmbus_get_mmio_list(device_t dev)
 {
+	struct vmbus_softc *sc = device_get_softc(dev);
 	device_t acpi0, pcib0 = NULL;
 	device_t *children;
 	int i, count;
+
+	TAILQ_INIT(&sc->vmbus_mmio_list);
 
 	/* Try to find _CRS on VMBus device */
 	vmbus_get_crs(dev, dev);

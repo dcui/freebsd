@@ -1174,7 +1174,7 @@ _hv_pcifront_read_config(struct hv_pci_dev *hpdev, int where, int size,
 			break;
 		}
 		/*
-		 * Make sure the write was done before we release the spinlock
+		 * Make sure the write was done before we release the lock,
 		 * allowing consecutive reads/writes.
 		 */
 		mb();
@@ -1220,7 +1220,7 @@ _hv_pcifront_write_config(struct hv_pci_dev *hpdev, int where, int size,
 		}
 
 		/*
-		 * Make sure the write was done before we release the spinlock
+		 * Make sure the write was done before we release the lock,
 		 * allowing consecutive reads/writes.
 		 */
 		mb();
@@ -1568,7 +1568,7 @@ pcivsc_pcib_release_msix(device_t pcib, device_t dev, int irq)
 
 #define	MSI_INTEL_ADDR_DEST	0x000ff000
 #define	MSI_INTEL_DATA_INTVEC	IOART_INTVEC	/* Interrupt vector. */
-#define MSI_INTEL_DATA_DELFIXED	IOART_DELFIXED
+#define	MSI_INTEL_DATA_DELFIXED	IOART_DELFIXED
 
 static int
 pcivsc_pcib_map_msi(device_t pcib, device_t child, int irq, uint64_t *addr,
