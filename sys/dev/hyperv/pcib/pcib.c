@@ -80,7 +80,7 @@ __FBSDID("$FreeBSD$");
 	device_printf((dev), "warning: " fmt, ## __VA_ARGS__)
 
 #define	pr_info(fmt, ...) \
-	printf("pcivsc: " fmt, ## __VA_ARGS__)
+	printf("vmbus_pcib: " fmt, ## __VA_ARGS__)
 
 #define offsetofend(TYPE, MEMBER) \
 	(offsetof(TYPE, MEMBER) + sizeof(((TYPE *)0)->MEMBER))
@@ -377,7 +377,7 @@ enum hv_pcibus_state {
 struct hv_pcibus {
 	device_t pcib;
 	device_t pci_bus;
-	struct pcivsc_softc *sc;
+	struct vmbus_pcib_softc *sc;
 
 	uint16_t pci_domain;
 
@@ -468,7 +468,7 @@ wslot_to_devfn(uint32_t wslot)
 	return (PCI_DEVFN(slot, func));
 }
 
-struct pcivsc_softc {
+struct vmbus_pcib_softc {
 	struct vmbus_channel	*chan;
 	void *rx_buf;
 
@@ -818,9 +818,9 @@ hv_pci_eject_device(struct hv_pci_dev *hpdev)
 #define PCIVSC_PACKET_SIZE	0x100
 
 static void
-pcivsc_on_channel_callback(struct vmbus_channel *chan, void *arg)
+vmbus_pcib_on_channel_callback(struct vmbus_channel *chan, void *arg)
 {
-	struct pcivsc_softc *sc = arg;
+	struct vmbus_pcib_softc *sc = arg;
 	struct hv_pcibus *hbus = sc->hbus;
 
 	void *buffer;
@@ -1158,7 +1158,7 @@ _hv_pcifront_read_config(struct hv_pci_dev *hpdev, int where, int size,
 		/* Choose the function to be read. */
 		hv_cfg_write_4(hbus, 0, hpdev->desc.wslot.val);
 
-		/* Make sure the function was chosen before we start reading. */
+		/* Make sure the function was chosen before we start reading.*/
 		mb();
 
 		/* Read from that function's config space. */
@@ -1203,7 +1203,7 @@ _hv_pcifront_write_config(struct hv_pci_dev *hpdev, int where, int size,
 		/* Choose the function to be written. */
 		hv_cfg_write_4(hbus, 0, hpdev->desc.wslot.val);
 
-		/* Make sure the function was chosen before we start writing. */
+		/* Make sure the function was chosen before we start writing.*/
 		wmb();
 
 		/* Write to that function's config space. */
@@ -1237,7 +1237,7 @@ _hv_pcifront_write_config(struct hv_pci_dev *hpdev, int where, int size,
  *
  */
 static int
-pcivsc_probe(device_t dev)
+vmbus_pcib_probe(device_t dev)
 {
 	if (VMBUS_PROBE_GUID(device_get_parent(dev), dev,
 	    &g_pci_vsc_device_type) == 0) {
@@ -1254,11 +1254,11 @@ pcivsc_probe(device_t dev)
  * and initializes the "hardware" and software.
  */
 static int
-pcivsc_attach(device_t dev)
+vmbus_pcib_attach(device_t dev)
 {
 	const int pci_ring_size = (4 * PAGE_SIZE);
 	struct hyperv_guid inst_guid;
-	struct pcivsc_softc *sc;
+	struct vmbus_pcib_softc *sc;
 	struct hv_pcibus *hbus;
 	int rid = 0;
 	int ret;
@@ -1291,9 +1291,9 @@ pcivsc_attach(device_t dev)
 	sc->rx_buf = kzalloc(PCIVSC_PACKET_SIZE);
 	sc->hbus = hbus;
 
-	sc->taskq = taskqueue_create("pcivsc_tq", M_WAITOK,
+	sc->taskq = taskqueue_create("vmbus_pcib_tq", M_WAITOK,
 	    taskqueue_thread_enqueue, &sc->taskq);
-	taskqueue_start_threads(&sc->taskq, 1, PI_NET, "pcivsc_tq");
+	taskqueue_start_threads(&sc->taskq, 1, PI_NET, "vmbus_pcib_tq");
 
 	hbus->sc = sc;
 
@@ -1301,7 +1301,7 @@ pcivsc_attach(device_t dev)
 	hbus->query_comp = &hbus->query_completion;
 
 	ret = vmbus_chan_open(sc->chan, pci_ring_size, pci_ring_size,
-		NULL, 0, pcivsc_on_channel_callback, sc);
+		NULL, 0, vmbus_pcib_on_channel_callback, sc);
 	if (ret)
 		goto free_res;
 
@@ -1355,9 +1355,9 @@ free_bus:
  * Standard detach entry point
  */
 static int
-pcivsc_detach(device_t dev)
+vmbus_pcib_detach(device_t dev)
 {
-	struct pcivsc_softc *sc = device_get_softc(dev);
+	struct vmbus_pcib_softc *sc = device_get_softc(dev);
 	struct hv_pcibus *hbus = sc->hbus;
 	struct pci_message teardown_packet;
 	struct pci_bus_relations relations;
@@ -1398,36 +1398,36 @@ pcivsc_detach(device_t dev)
 }
 
 static int
-pcivsc_read_ivar(device_t dev, device_t child, int which, uintptr_t *result)
+vmbus_pcib_read_ivar(device_t dev, device_t child, int which, uintptr_t *val)
 {
-	struct pcivsc_softc *sc = device_get_softc(dev);
+	struct vmbus_pcib_softc *sc = device_get_softc(dev);
 
 	switch (which) {
 	case PCIB_IVAR_DOMAIN:
-		*result = sc->hbus->pci_domain;
+		*val = sc->hbus->pci_domain;
 		return (0);
 
 	case PCIB_IVAR_BUS:
 		/* There is only bus 0. */
-		*result = 0;
+		*val = 0;
 		return (0);
 	}
 	return (ENOENT);
 }
 
 static int
-pcivsc_write_ivar(device_t dev, device_t child, int which, uintptr_t value)
+vmbus_pcib_write_ivar(device_t dev, device_t child, int which, uintptr_t val)
 {
 	return (ENOENT);
 }
 
 static struct resource *
-pcivsc_alloc_resource(device_t dev, device_t child, int type, int *rid,
+vmbus_pcib_alloc_resource(device_t dev, device_t child, int type, int *rid,
 	rman_res_t start, rman_res_t end, rman_res_t count, u_int flags)
 {
 	unsigned int bar_no;
 	struct hv_pci_dev *hpdev;
-	struct pcivsc_softc *sc = device_get_softc(dev);
+	struct vmbus_pcib_softc *sc = device_get_softc(dev);
 	struct resource *res;
 	unsigned int devfn;
 
@@ -1475,10 +1475,10 @@ pcivsc_alloc_resource(device_t dev, device_t child, int type, int *rid,
 }
 
 static int
-pcivsc_release_resource(device_t dev, device_t child, int type, int rid,
+vmbus_pcib_release_resource(device_t dev, device_t child, int type, int rid,
     struct resource *r)
 {
-	struct pcivsc_softc *sc = device_get_softc(dev);
+	struct vmbus_pcib_softc *sc = device_get_softc(dev);
 
 	if (type == PCI_RES_BUS)
 		return (pci_domain_release_bus(sc->hbus->pci_domain, child,
@@ -1491,17 +1491,17 @@ pcivsc_release_resource(device_t dev, device_t child, int type, int rid,
 }
 
 static int
-pcivsc_get_cpus(device_t pcib, device_t dev, enum cpu_sets op,
+vmbus_pcib_get_cpus(device_t pcib, device_t dev, enum cpu_sets op,
     size_t setsize, cpuset_t *cpuset)
 {
 	return (bus_get_cpus(pcib, op, setsize, cpuset));
 }
 
 static uint32_t
-pcivsc_pcib_read_config(device_t dev, u_int bus, u_int slot, u_int func,
+vmbus_pcib_read_config(device_t dev, u_int bus, u_int slot, u_int func,
     u_int reg, int bytes)
 {
-	struct pcivsc_softc *sc = device_get_softc(dev);
+	struct vmbus_pcib_softc *sc = device_get_softc(dev);
 	struct hv_pci_dev *hpdev;
 	unsigned int devfn = PCI_DEVFN(slot, func);
 	uint32_t data = 0;
@@ -1518,10 +1518,10 @@ pcivsc_pcib_read_config(device_t dev, u_int bus, u_int slot, u_int func,
 }
 
 static void
-pcivsc_pcib_write_config(device_t dev, u_int bus, u_int slot, u_int func,
+vmbus_pcib_write_config(device_t dev, u_int bus, u_int slot, u_int func,
     u_int reg, uint32_t data, int bytes)
 {
-	struct pcivsc_softc *sc = device_get_softc(dev);
+	struct vmbus_pcib_softc *sc = device_get_softc(dev);
 	struct hv_pci_dev *hpdev;
 	unsigned int devfn = PCI_DEVFN(slot, func);
 
@@ -1535,33 +1535,34 @@ pcivsc_pcib_write_config(device_t dev, u_int bus, u_int slot, u_int func,
 }
 
 static int
-pcivsc_pcib_route_interrupt(device_t pcib, device_t dev, int pin)
+vmbus_pcib_route_intr(device_t pcib, device_t dev, int pin)
 {
 	/* We only support MSI/MSI-X and don't support INTx interrupt. */
 	return (PCI_INVALID_IRQ);
 }
 
 static int
-pcivsc_pcib_alloc_msi(device_t pcib, device_t dev, int count, int maxcount, int *irqs)
+vmbus_pcib_alloc_msi(device_t pcib, device_t dev, int count,
+    int maxcount, int *irqs)
 {
 	return (PCIB_ALLOC_MSI(device_get_parent(pcib), dev, count, maxcount,
 	    irqs));
 }
 
 static int
-pcivsc_pcib_release_msi(device_t pcib, device_t dev, int count, int *irqs)
+vmbus_pcib_release_msi(device_t pcib, device_t dev, int count, int *irqs)
 {
 	return (PCIB_RELEASE_MSI(device_get_parent(pcib), dev, count, irqs));
 }
 
 static int
-pcivsc_pcib_alloc_msix(device_t pcib, device_t dev, int *irq)
+vmbus_pcib_alloc_msix(device_t pcib, device_t dev, int *irq)
 {
 	return (PCIB_ALLOC_MSIX(device_get_parent(pcib), dev, irq));
 }
 
 static int
-pcivsc_pcib_release_msix(device_t pcib, device_t dev, int irq)
+vmbus_pcib_release_msix(device_t pcib, device_t dev, int irq)
 {
 	return (PCIB_RELEASE_MSIX(device_get_parent(pcib), dev, irq));
 }
@@ -1571,8 +1572,8 @@ pcivsc_pcib_release_msix(device_t pcib, device_t dev, int irq)
 #define	MSI_INTEL_DATA_DELFIXED	IOART_DELFIXED
 
 static int
-pcivsc_pcib_map_msi(device_t pcib, device_t child, int irq, uint64_t *addr,
-    uint32_t *data)
+vmbus_pcib_map_msi(device_t pcib, device_t child, int irq,
+    uint64_t *addr, uint32_t *data)
 {
 	unsigned int devfn;
 	struct hv_pci_dev *hpdev;
@@ -1583,7 +1584,7 @@ pcivsc_pcib_map_msi(device_t pcib, device_t child, int irq, uint64_t *addr,
 	unsigned int cpu, vcpu_id;
 	unsigned int vector;
 
-	struct pcivsc_softc *sc = device_get_softc(pcib);
+	struct vmbus_pcib_softc *sc = device_get_softc(pcib);
 	struct pci_create_interrupt *int_pkt;
 	struct compose_comp_ctxt comp;
 	struct {
@@ -1654,43 +1655,43 @@ pcivsc_pcib_map_msi(device_t pcib, device_t child, int irq, uint64_t *addr,
 	return (0);
 }
 
-static device_method_t pcivsc_methods[] = {
+static device_method_t vmbus_pcib_methods[] = {
 	/* Device interface */
-	DEVMETHOD(device_probe,         pcivsc_probe),
-	DEVMETHOD(device_attach,        pcivsc_attach),
-	DEVMETHOD(device_detach,        pcivsc_detach),
+	DEVMETHOD(device_probe,         vmbus_pcib_probe),
+	DEVMETHOD(device_attach,        vmbus_pcib_attach),
+	DEVMETHOD(device_detach,        vmbus_pcib_detach),
 	DEVMETHOD(device_shutdown,	bus_generic_shutdown),
 	DEVMETHOD(device_suspend,	bus_generic_suspend),
 	DEVMETHOD(device_resume,	bus_generic_resume),
 
 	/* Bus interface */
-	DEVMETHOD(bus_read_ivar,		pcivsc_read_ivar),
-	DEVMETHOD(bus_write_ivar,		pcivsc_write_ivar),
-	DEVMETHOD(bus_alloc_resource,		pcivsc_alloc_resource),
-	DEVMETHOD(bus_release_resource,		pcivsc_release_resource),
-	DEVMETHOD(bus_activate_resource,	bus_generic_activate_resource),
-	DEVMETHOD(bus_deactivate_resource,	bus_generic_deactivate_resource),
-	DEVMETHOD(bus_setup_intr,		bus_generic_setup_intr),
-	DEVMETHOD(bus_teardown_intr,		bus_generic_teardown_intr),
-	DEVMETHOD(bus_get_cpus,			pcivsc_get_cpus),
+	DEVMETHOD(bus_read_ivar,		vmbus_pcib_read_ivar),
+	DEVMETHOD(bus_write_ivar,		vmbus_pcib_write_ivar),
+	DEVMETHOD(bus_alloc_resource,		vmbus_pcib_alloc_resource),
+	DEVMETHOD(bus_release_resource,		vmbus_pcib_release_resource),
+	DEVMETHOD(bus_activate_resource,   bus_generic_activate_resource),
+	DEVMETHOD(bus_deactivate_resource, bus_generic_deactivate_resource),
+	DEVMETHOD(bus_setup_intr,	   bus_generic_setup_intr),
+	DEVMETHOD(bus_teardown_intr,	   bus_generic_teardown_intr),
+	DEVMETHOD(bus_get_cpus,			vmbus_pcib_get_cpus),
 
 	/* pcib interface */
 	DEVMETHOD(pcib_maxslots,		pcib_maxslots),
-	DEVMETHOD(pcib_read_config,		pcivsc_pcib_read_config),
-	DEVMETHOD(pcib_write_config,		pcivsc_pcib_write_config),
-	DEVMETHOD(pcib_route_interrupt,		pcivsc_pcib_route_interrupt),
-	DEVMETHOD(pcib_alloc_msi,		pcivsc_pcib_alloc_msi),
-	DEVMETHOD(pcib_release_msi,		pcivsc_pcib_release_msi),
-	DEVMETHOD(pcib_alloc_msix,		pcivsc_pcib_alloc_msix),
-	DEVMETHOD(pcib_release_msix,		pcivsc_pcib_release_msix),
-	DEVMETHOD(pcib_map_msi,			pcivsc_pcib_map_msi),
+	DEVMETHOD(pcib_read_config,		vmbus_pcib_read_config),
+	DEVMETHOD(pcib_write_config,		vmbus_pcib_write_config),
+	DEVMETHOD(pcib_route_interrupt,		vmbus_pcib_route_intr),
+	DEVMETHOD(pcib_alloc_msi,		vmbus_pcib_alloc_msi),
+	DEVMETHOD(pcib_release_msi,		vmbus_pcib_release_msi),
+	DEVMETHOD(pcib_alloc_msix,		vmbus_pcib_alloc_msix),
+	DEVMETHOD(pcib_release_msix,		vmbus_pcib_release_msix),
+	DEVMETHOD(pcib_map_msi,			vmbus_pcib_map_msi),
 
 	DEVMETHOD_END
 };
 
 static devclass_t pcib_devclass;
 
-DEFINE_CLASS_0(pcib, pcivsc_driver, pcivsc_methods,
-		sizeof(struct pcivsc_softc));
-DRIVER_MODULE(pcivsc, vmbus, pcivsc_driver, pcib_devclass, 0, 0);
-MODULE_DEPEND(pcivsc, vmbus, 1, 1, 1);
+DEFINE_CLASS_0(pcib, vmbus_pcib_driver, vmbus_pcib_methods,
+		sizeof(struct vmbus_pcib_softc));
+DRIVER_MODULE(vmbus_pcib, vmbus, vmbus_pcib_driver, pcib_devclass, 0, 0);
+MODULE_DEPEND(vmbus_pcib, vmbus, 1, 1, 1);
