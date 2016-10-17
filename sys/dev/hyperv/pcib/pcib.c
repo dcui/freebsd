@@ -584,7 +584,9 @@ hv_pci_delete_device(struct hv_pci_dev *hpdev)
 		mtx_unlock(&Giant);
 	}
 
+	mtx_lock(&hbus->device_list_lock);
 	TAILQ_REMOVE(&hbus->children, hpdev, link);
+	mtx_unlock(&hbus->device_list_lock);
 
 	TAILQ_FOREACH_SAFE(hid, &hpdev->irq_desc_list, link, tmp_hid)
 		hv_int_desc_free(hpdev, hid);
@@ -709,12 +711,10 @@ pci_devices_present_work(void *arg, int pending __unused)
 	}
 
 	/* Remove missing device(s), if any */
-	mtx_lock(&hbus->device_list_lock);
 	TAILQ_FOREACH_SAFE(hpdev, &hbus->children, link, tmp_hpdev) {
 		if (hpdev->reported_missing)
 			hv_pci_delete_device(hpdev);
 	}
-	mtx_unlock(&hbus->device_list_lock);
 
 	/* Rescan the bus to find any new device, if necessary. */
 	if (hbus->state == hv_pcibus_installed && need_rescan)
@@ -787,9 +787,7 @@ hv_eject_device_work(void *arg, int pending __unused)
 		uint8_t buffer[sizeof(struct pci_eject_response)];
 	} ctxt;
 
-	mtx_lock(&hbus->device_list_lock);
 	hv_pci_delete_device(hpdev);
-	mtx_unlock(&hbus->device_list_lock);
 
 	memset(&ctxt, 0, sizeof(ctxt));
 	eject_pkt = (struct pci_eject_response *)&ctxt.pkt.message;
