@@ -77,6 +77,12 @@ struct vmbus_pcpu_data {
 	struct task		message_task;	/* message task */
 } __aligned(CACHE_LINE_SIZE);
 
+#if __FreeBSD_version < 1100000
+typedef u_long rman_res_t;
+#define RM_MAX_END			(~(rman_res_t)0)
+#define RMAN_IS_DEFAULT_RANGE(s,e)	((s) == 0 && (e) == RM_MAX_END)
+#endif
+
 struct vmbus_mmio_entry {
 	TAILQ_ENTRY(vmbus_mmio_entry) link;
 	rman_res_t	start;
