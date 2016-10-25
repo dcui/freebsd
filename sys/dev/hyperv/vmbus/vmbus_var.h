@@ -77,6 +77,18 @@ struct vmbus_pcpu_data {
 	struct task		message_task;	/* message task */
 } __aligned(CACHE_LINE_SIZE);
 
+#if __FreeBSD_version < 1100000
+typedef u_long rman_res_t;
+#define RM_MAX_END			(~(rman_res_t)0)
+#define RMAN_IS_DEFAULT_RANGE(s,e)	((s) == 0 && (e) == RM_MAX_END)
+#endif
+
+struct vmbus_mmio_entry {
+	TAILQ_ENTRY(vmbus_mmio_entry) link;
+	rman_res_t	start;
+	rman_res_t	end;
+};
+
 struct vmbus_softc {
 	void			(*vmbus_event_proc)(struct vmbus_softc *, int);
 	u_long			*vmbus_tx_evtflags;
@@ -120,6 +132,9 @@ struct vmbus_softc {
 	/* Complete channel list */
 	struct mtx		vmbus_chan_lock;
 	TAILQ_HEAD(, vmbus_channel) vmbus_chans;
+
+	/* The list of usable MMIO ranges for PCIe pass-through */
+	TAILQ_HEAD(, vmbus_mmio_entry) vmbus_mmio_list;
 };
 
 #define VMBUS_FLAG_ATTACHED	0x0001	/* vmbus was attached */
