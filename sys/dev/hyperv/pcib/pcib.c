@@ -77,21 +77,6 @@ typedef u_long rman_res_t;
 #define RM_MAX_END	(~(rman_res_t)0)
 #endif
 
-#define kzalloc(size)  (malloc((size), M_DEVBUF, M_WAITOK | M_ZERO))
-#define kfree(ptr) (free((ptr), M_DEVBUF))
-
-#define	dev_err(dev, fmt, ...) \
-	device_printf((dev), "error: " fmt, ## __VA_ARGS__)
-
-#define	dev_warn(dev, fmt, ...) \
-	device_printf((dev), "warning: " fmt, ## __VA_ARGS__)
-
-#define	pr_info(fmt, ...) \
-	printf("vmbus_pcib: " fmt, ## __VA_ARGS__)
-
-#define offsetofend(TYPE, MEMBER) \
-	(offsetof(TYPE, MEMBER) + sizeof(((TYPE *)0)->MEMBER))
-
 struct completion {
 	unsigned int done;
 	struct mtx lock;
@@ -511,7 +496,7 @@ hv_pci_generic_compl(void *context, struct pci_response *resp,
 {
 	struct hv_pci_compl *comp_pkt = context;
 
-	if (resp_packet_size >= offsetofend(struct pci_response, status))
+	if (resp_packet_size >= sizeof(struct pci_response))
 		comp_pkt->completion_status = resp->status;
 	else
 		comp_pkt->completion_status = -1;
@@ -529,7 +514,7 @@ q_resource_requirements(void *context, struct pci_response *resp,
 	int i;
 
 	if (resp->status < 0) {
-		pr_info("query resource requirements failed\n");
+		printf("vmbus_pcib: failed to query resource requirements\n");
 	} else {
 		for (i = 0; i < MAX_NUM_BARS; i++)
 			completion->hpdev->probed_bar[i] =
@@ -570,7 +555,7 @@ hv_int_desc_free(struct hv_pci_dev *hpdev, struct hv_irq_desc *hid)
 	vmbus_chan_send(hpdev->hbus->sc->chan, VMBUS_CHANPKT_TYPE_INBAND, 0,
 	    int_pkt, sizeof(*int_pkt), 0);
 
-	kfree(hid);
+	free(hid, M_DEVBUF);
 }
 
 static void
@@ -599,7 +584,7 @@ hv_pci_delete_device(struct hv_pci_dev *hpdev)
 	TAILQ_FOREACH_SAFE(hid, &hpdev->irq_desc_list, link, tmp_hid)
 		hv_int_desc_free(hpdev, hid);
 
-	kfree(hpdev);
+	free(hpdev, M_DEVBUF);
 }
 
 static struct hv_pci_dev *
@@ -614,7 +599,7 @@ new_pcichild_device(struct hv_pcibus *hbus, struct pci_func_desc *desc)
 	} ctxt;
 	int ret;
 
-	hpdev = kzalloc(sizeof(*hpdev));
+	hpdev = malloc(sizeof(*hpdev), M_DEVBUF, M_WAITOK | M_ZERO);
 	hpdev->hbus = hbus;
 
 	TAILQ_INIT(&hpdev->irq_desc_list);
@@ -646,7 +631,7 @@ new_pcichild_device(struct hv_pcibus *hbus, struct pci_func_desc *desc)
 	return (hpdev);
 err:
 	free_completion(&comp_pkt.host_event);
-	kfree(hpdev);
+	free(hpdev, M_DEVBUF);
 	return (NULL);
 }
 
@@ -788,7 +773,7 @@ pci_devices_present_work(void *arg, int pending __unused)
 	bool need_rescan = false;
 
 	hbus = dr_wrk->bus;
-	kfree(dr_wrk);
+	free(dr_wrk, M_DEVBUF);
 
 	/* Pull this off the queue and process it if it was the last one. */
 	mtx_lock(&hbus->device_list_lock);
@@ -798,7 +783,7 @@ pci_devices_present_work(void *arg, int pending __unused)
 
 		/* Throw this away if the list still has stuff in it. */
 		if (!TAILQ_EMPTY(&hbus->dr_list)) {
-			kfree(dr);
+			free(dr, M_DEVBUF);
 			continue;
 		}
 	}
@@ -838,7 +823,7 @@ pci_devices_present_work(void *arg, int pending __unused)
 
 			hpdev = new_pcichild_device(hbus, new_desc);
 			if (!hpdev)
-				pr_info("failed to add a new device\n");
+				printf("vmbus_pcib: failed to add a child\n");
 		}
 	}
 
@@ -859,7 +844,7 @@ pci_devices_present_work(void *arg, int pending __unused)
 		complete(query_comp);
 	}
 
-	kfree(dr);
+	free(dr, M_DEVBUF);
 }
 
 static struct hv_pci_dev *
@@ -885,12 +870,14 @@ hv_pci_devices_present(struct hv_pcibus *hbus,
 {
 	struct hv_dr_state *dr;
 	struct hv_dr_work *dr_wrk;
+	unsigned long dr_size;
 
 	if (hbus->detaching && relations->device_count > 0)
 		return;
 
-	dr = kzalloc(offsetof(struct hv_dr_state, func) +
-	    (sizeof(struct pci_func_desc) * relations->device_count));
+	dr_size = offsetof(struct hv_dr_state, func) +
+	    (sizeof(struct pci_func_desc) * relations->device_count);
+	dr = malloc(dr_size, M_DEVBUF, M_WAITOK | M_ZERO);
 
 	dr->device_count = relations->device_count;
 	if (dr->device_count != 0)
@@ -901,7 +888,7 @@ hv_pci_devices_present(struct hv_pcibus *hbus,
 	TAILQ_INSERT_TAIL(&hbus->dr_list, dr, link);
 	mtx_unlock(&hbus->device_list_lock);
 
-	dr_wrk = kzalloc(sizeof(*dr_wrk));
+	dr_wrk = malloc(sizeof(*dr_wrk), M_DEVBUF, M_WAITOK | M_ZERO);
 	dr_wrk->bus = hbus;
 	TASK_INIT(&dr_wrk->task, 0, pci_devices_present_work, dr_wrk);
 	taskqueue_enqueue(hbus->sc->taskq, &dr_wrk->task);
@@ -978,12 +965,12 @@ vmbus_pcib_on_channel_callback(struct vmbus_channel *chan, void *arg)
 		if (ret == ENOBUFS) {
 			/* Handle large packet */
 			if (bufferlen > PCIB_PACKET_SIZE) {
-				kfree(buffer);
+				free(buffer, M_DEVBUF);
 				buffer = NULL;
 			}
 
 			/* alloc new buffer */
-			buffer = kzalloc(bytes_rxed);
+			buffer = malloc(bytes_rxed, M_DEVBUF, M_WAITOK | M_ZERO);
 			bufferlen = bytes_rxed;
 
 			continue;
@@ -1033,20 +1020,20 @@ vmbus_pcib_on_channel_callback(struct vmbus_channel *chan, void *arg)
 
 				break;
 			default:
-				pr_info("Unknown message type 0x%x\n",
+				printf("vmbus_pcib: Unknown msg type 0x%x\n",
 				    new_msg->message_type.type);
 				break;
 			}
 			break;
 		default:
-			pr_info("Unknown VMBus message type %hd\n",
+			printf("vmbus_pcib: Unknown VMBus msg type %hd\n",
 			    pkt->cph_type);
 			break;
 		}
 	} while (1);
 
 	if (bufferlen > PCIB_PACKET_SIZE)
-		kfree(buffer);
+		free(buffer, M_DEVBUF);
 }
 
 static int
@@ -1078,8 +1065,8 @@ hv_pci_protocol_negotiation(struct hv_pcibus *hbus)
 	wait_for_completion(&comp_pkt.host_event);
 
 	if (comp_pkt.completion_status < 0) {
-		dev_err(hbus->pcib,
-		    "PCI Pass-through VSP failed version request %x\n",
+		device_printf(hbus->pcib,
+		    "vmbus_pcib version negotiation failed: %x\n",
 		    comp_pkt.completion_status);
 		ret = EPROTO;
 	} else {
@@ -1139,7 +1126,7 @@ hv_pci_enter_d0(struct hv_pcibus *hbus)
 	wait_for_completion(&comp_pkt.host_event);
 
 	if (comp_pkt.completion_status < 0) {
-		dev_err(hbus->pcib, "PCI Pass-through VSP failed D0 Entry\n");
+		device_printf(hbus->pcib, "vmbus_pcib failed to enable D0\n");
 		ret = EPROTO;
 	} else {
 		ret = 0;
@@ -1164,7 +1151,8 @@ hv_send_resources_allocated(struct hv_pcibus *hbus)
 	uint32_t wslot;
 	int ret = 0;
 
-	pkt = kzalloc(sizeof(*pkt) + sizeof(*res_assigned));
+	pkt = malloc(sizeof(*pkt) + sizeof(*res_assigned),
+	    M_DEVBUF, M_WAITOK | M_ZERO);
 
 	for (wslot = 0; wslot < 256; wslot++) {
 		hpdev = get_pcichild_wslot(hbus, wslot);
@@ -1194,12 +1182,13 @@ hv_send_resources_allocated(struct hv_pcibus *hbus)
 
 		if (comp_pkt.completion_status < 0) {
 			ret = EPROTO;
-			dev_err(hbus->pcib, "resource allocated failed\n");
+			device_printf(hbus->pcib,
+			    "failed to send PCI_RESOURCES_ASSIGNED\n");
 			break;
 		}
 	}
 
-	kfree(pkt);
+	free(pkt, M_DEVBUF);
 	return (ret);
 }
 
@@ -1421,7 +1410,7 @@ vmbus_pcib_attach(device_t dev)
 	int rid = 0;
 	int ret;
 
-	hbus = kzalloc(sizeof(*hbus));
+	hbus = malloc(sizeof(*hbus), M_DEVBUF, M_WAITOK | M_ZERO);
 	hbus->pcib = dev;
 
 	VMBUS_GET_INSTANCE_GUID(device_get_parent(dev), dev, &inst_guid);
@@ -1437,7 +1426,7 @@ vmbus_pcib_attach(device_t dev)
 	    RF_ACTIVE | rman_make_alignment_flags(PAGE_SIZE));
 
 	if (!hbus->cfg_res) {
-		dev_err(dev, "can't get resource for config window\n");
+		device_printf(dev, "failed to get resource for cfg window\n");
 		ret = ENXIO;
 		goto free_bus;
 	}
@@ -1446,7 +1435,7 @@ vmbus_pcib_attach(device_t dev)
 
 	sc = device_get_softc(dev);
 	sc->chan = vmbus_get_channel(dev);
-	sc->rx_buf = kzalloc(PCIB_PACKET_SIZE);
+	sc->rx_buf = malloc(PCIB_PACKET_SIZE, M_DEVBUF, M_WAITOK | M_ZERO);
 	sc->hbus = hbus;
 
 	/*
@@ -1489,7 +1478,7 @@ vmbus_pcib_attach(device_t dev)
 
 	hbus->pci_bus = device_add_child(dev, "pci", -1);
 	if (!hbus->pci_bus) {
-		dev_err(dev, "couldn't attach Hyper-V PCI bus\n");
+		device_printf(dev, "failed to create pci bus\n");
 		ret = ENXIO;
 		goto vmbus_close;
 	}
@@ -1506,12 +1495,12 @@ vmbus_close:
 free_res:
 	taskqueue_free(sc->taskq);
 	free_completion(&hbus->query_completion);
-	kfree(sc->rx_buf);
+	free(sc->rx_buf, M_DEVBUF);
 	bus_release_resource(dev, SYS_RES_MEMORY, 0, hbus->cfg_res);
 free_bus:
 	mtx_destroy(&hbus->device_list_lock);
 	mtx_destroy(&hbus->config_lock);
-	kfree(hbus);
+	free(hbus, M_DEVBUF);
 	return (ret);
 }
 
@@ -1536,11 +1525,11 @@ vmbus_pcib_detach(device_t dev)
 	ret = vmbus_chan_send(sc->chan, VMBUS_CHANPKT_TYPE_INBAND, 0,
 	    &teardown_packet, sizeof(struct pci_message), 0);
 	if (ret)
-		dev_err(dev, "Couldn't send teardown packet\n");
+		device_printf(dev, "failed to send PCI_BUS_D0EXIT\n");
 
 	ret = hv_send_resources_released(hbus);
 	if (ret)
-		dev_err(dev, "Couldn't send resources released packet(s)\n");
+		device_printf(dev, "failed to send PCI_RESOURCES_RELEASED\n");
 
 	/* Delete any children which might still exist. */
 	memset(&relations, 0, sizeof(relations));
@@ -1550,12 +1539,12 @@ vmbus_pcib_detach(device_t dev)
 	taskqueue_free(sc->taskq);
 
 	free_completion(&hbus->query_completion);
-	kfree(sc->rx_buf);
+	free(sc->rx_buf, M_DEVBUF);
 	bus_release_resource(dev, SYS_RES_MEMORY, 0, hbus->cfg_res);
 
 	mtx_destroy(&hbus->device_list_lock);
 	mtx_destroy(&hbus->config_lock);
-	kfree(hbus);
+	free(hbus, M_DEVBUF);
 
 	return (0);
 }
@@ -1812,7 +1801,7 @@ vmbus_pcib_map_msi(device_t pcib, device_t child, int irq,
 	*addr = comp.int_desc.address;
 	*data = comp.int_desc.data;
 
-	hid = kzalloc(sizeof(struct hv_irq_desc));
+	hid = malloc(sizeof(struct hv_irq_desc), M_DEVBUF, M_WAITOK | M_ZERO);
 	hid->irq = irq;
 	hid->desc = comp.int_desc;
 	TAILQ_INSERT_TAIL(&hpdev->irq_desc_list, hid, link);
