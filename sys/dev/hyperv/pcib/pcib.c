@@ -801,12 +801,19 @@ static void
 hv_pci_eject_device(struct hv_pci_dev *hpdev)
 {
 	struct hv_pcibus *hbus = hpdev->hbus;
+	struct taskqueue *taskq;
 
 	if (hbus->detaching)
 		return;
 
+	/*
+	 * Push this task into the same taskqueue on which
+	 * vmbus_pcib_attach() runs, so we're sure this task can't run
+	 * concurrently with vmbus_pcib_attach().
+	 */
 	TASK_INIT(&hpdev->eject_task, 0, hv_eject_device_work, hpdev);
-	taskqueue_enqueue(hbus->sc->taskq, &hpdev->eject_task);
+	taskq = vmbus_chan_mgmt_tq(hbus->sc->chan);
+	taskqueue_enqueue(taskq, &hpdev->eject_task);
 }
 
 #define PCIB_PACKET_SIZE	0x100
@@ -1226,6 +1233,31 @@ _hv_pcifront_write_config(struct hv_pci_dev *hpdev, int where, int size,
 	}
 }
 
+static void
+vmbus_pcib_set_detaching(void *arg, int pending __unused)
+{
+	struct hv_pcibus *hbus = arg;
+
+	atomic_set_int(&hbus->detaching, 1);
+}
+
+static void
+vmbus_pcib_pre_detach(struct hv_pcibus *hbus)
+{
+	struct task task;
+
+	TASK_INIT(&task, 0, vmbus_pcib_set_detaching, hbus);
+
+	/*
+	 * Make sure the channel callback won't push any possible new
+	 * PCI_BUS_RELATIONS and PCI_EJECT tasks to sc->taskq.
+	 */
+	vmbus_chan_run_task(hbus->sc->chan, &task);
+
+	taskqueue_drain_all(hbus->sc->taskq);
+}
+
+
 /*
  * Standard probe entry point.
  *
@@ -1285,6 +1317,13 @@ vmbus_pcib_attach(device_t dev)
 	sc->rx_buf = kzalloc(PCIB_PACKET_SIZE);
 	sc->hbus = hbus;
 
+	/*
+	 * The taskq is used to handle PCI_BUS_RELATIONS and PCI_EJECT
+	 * messages. NB: we can't handle the messages in the channel callback
+	 * directly, because the message handlers need to send new messages
+	 * to the host and waits for the host's completion messages, which
+	 * must also be handled by the channel callback.
+	 */
 	sc->taskq = taskqueue_create("vmbus_pcib_tq", M_WAITOK,
 	    taskqueue_thread_enqueue, &sc->taskq);
 	taskqueue_start_threads(&sc->taskq, 1, PI_NET, "vmbus_pcib_tq");
@@ -1330,8 +1369,7 @@ vmbus_pcib_attach(device_t dev)
 	return (0);
 
 vmbus_close:
-	atomic_set_int(&hbus->detaching, 1);
-	taskqueue_drain_all(sc->taskq);
+	vmbus_pcib_pre_detach(hbus);
 	vmbus_chan_close(sc->chan);
 free_res:
 	taskqueue_free(sc->taskq);
@@ -1357,7 +1395,7 @@ vmbus_pcib_detach(device_t dev)
 	struct pci_bus_relations relations;
 	int ret;
 
-	atomic_set_int(&hbus->detaching, 1);
+	vmbus_pcib_pre_detach(hbus);
 
 	if (hbus->state == hv_pcibus_installed)
 		bus_generic_detach(dev);
@@ -1376,7 +1414,6 @@ vmbus_pcib_detach(device_t dev)
 	memset(&relations, 0, sizeof(relations));
 	hv_pci_devices_present(hbus, &relations);
 
-	taskqueue_drain_all(sc->taskq);
 	vmbus_chan_close(sc->chan);
 	taskqueue_free(sc->taskq);
 
