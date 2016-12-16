@@ -500,6 +500,8 @@ hn_nvs_conf_ndis(struct hn_softc *sc, int mtu)
 	conf.nvs_type = HN_NVS_TYPE_NDIS_CONF;
 	conf.nvs_mtu = mtu;
 	conf.nvs_caps = HN_NVS_NDIS_CONF_VLAN;
+	if (sc->hn_nvs_ver >= HN_NVS_VERSION_5)
+		conf.nvs_caps |= HN_NVS_NDIS_CONF_SRIOV;
 
 	/* NOTE: No response. */
 	error = hn_nvs_req_send(sc, &conf, sizeof(conf));
@@ -718,4 +720,61 @@ hn_nvs_send_rndis_ctrl(struct vmbus_channel *chan,
 
 	return hn_nvs_send_rndis_sglist(chan, HN_NVS_RNDIS_MTYPE_CTRL,
 	    sndc, gpa, gpa_cnt);
+}
+
+struct hn_rx_ring_rcv_vf {
+	struct hn_rx_ring	*rxr;
+	struct ifnet		*vf;
+};
+
+static void
+hn_nvs_update_vf_if_task(void *arg, int pending __unused)
+{
+	struct hn_rx_ring_rcv_vf *rxr_vf = arg;
+	struct hn_rx_ring *rxr = rxr_vf->rxr;
+	struct ifnet *vf = rxr_vf->vf;
+
+	rxr->vf_ifp = vf;
+}
+
+static void
+hn_nvs_update_vf_if(struct hn_softc *sc, struct ifnet *vf)
+{
+	struct hn_rx_ring *rxr;
+	struct hn_rx_ring_rcv_vf rxr_vf;
+	struct task task;
+	int i;
+
+	TASK_INIT(&task, 0, hn_nvs_update_vf_if_task, &rxr_vf);
+
+	for (i = 0; i < sc->hn_rx_ring_inuse; ++i) {
+		rxr = &sc->hn_rx_ring[i];
+
+		rxr_vf.rxr = rxr;
+		rxr_vf.vf = vf;
+
+		vmbus_chan_run_task(rxr->hn_chan, &task);
+	}
+}
+
+void
+hn_nvs_switch_datapath(struct hn_softc *sc, struct ifnet *ifp, bool vf)
+{
+	struct hn_nvs_sriov_init iov;
+	struct ifnet *hn_ifp = sc->hn_ifp;
+
+	memset(&iov, 0, sizeof(iov));
+	iov.nvs_type = HN_NVS_TYPE_SET_DATAPATH;
+	iov.nvs_active_path = vf ? HN_NVS_DATAPATH_VF :
+	    HN_NVS_DATAPATH_SYNTHETIC;
+
+	hn_nvs_req_send(sc, &iov, sizeof(iov));
+
+	sc->switched_to_vf = vf;
+
+	if (bootverbose)
+		if_printf(hn_ifp, "Data path is switched %s %s\n",
+		    vf ? "to" : "from", if_name(ifp));
+
+	hn_nvs_update_vf_if(sc, vf ? ifp : NULL);
 }

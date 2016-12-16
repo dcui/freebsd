@@ -59,6 +59,7 @@ struct hn_tx_ring;
 
 struct hn_rx_ring {
 	struct ifnet	*hn_ifp;
+	struct ifnet	*vf_ifp;	/* SR-IOV VF */
 	struct vmbus_channel *hn_chan;
 	struct hn_tx_ring *hn_txr;
 	void		*hn_pktbuf;
@@ -233,6 +234,10 @@ struct hn_softc {
 	int			hn_rss_ind_size;
 	uint32_t		hn_rss_hash;	/* NDIS_HASH_ */
 	struct ndis_rssprm_toeplitz hn_rss;
+
+	eventhandler_tag	ifaddr_event_hndl_tag;
+	eventhandler_tag	ifnet_event_hndl_tag;
+	bool			switched_to_vf;
 };
 
 #define HN_FLAG_RXBUF_CONNECTED		0x0001

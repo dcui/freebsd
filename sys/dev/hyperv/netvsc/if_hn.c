@@ -77,6 +77,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/systm.h>
 #include <sys/taskqueue.h>
 #include <sys/buf_ring.h>
+#include <sys/eventhandler.h>
 
 #include <machine/atomic.h>
 #include <machine/in_cksum.h>
@@ -84,6 +85,7 @@ __FBSDID("$FreeBSD$");
 #include <net/bpf.h>
 #include <net/ethernet.h>
 #include <net/if.h>
+#include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_types.h>
 #include <net/if_var.h>
@@ -887,6 +889,63 @@ hn_ifmedia_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
 	ifmr->ifm_active |= IFM_10G_T | IFM_FDX;
 }
 
+static void
+hn_nvs_ifnet_event(void *arg, struct ifnet *ifp, int event)
+{
+	struct hn_softc *sc = arg;
+	struct ifnet *hn_ifp;
+
+	HN_LOCK(sc);
+
+	hn_ifp = sc->hn_ifp;
+
+	if (hn_ifp == ifp || ifp->if_ioctl == hn_ioctl)
+		goto out;
+
+	if (bcmp(IF_LLADDR(ifp), IF_LLADDR(hn_ifp), ETHER_ADDR_LEN) != 0)
+		goto out;
+
+	switch (event) {
+	case IFNET_EVENT_UP:
+		hn_nvs_switch_datapath(sc, ifp, true);
+		break;
+
+	case IFNET_EVENT_DOWN:
+		hn_nvs_switch_datapath(sc, ifp, false);
+		break;
+
+	default:
+		break;
+	}
+
+out:
+	HN_UNLOCK(sc);
+}
+
+static void
+hn_nvs_ifaddr_event(void *arg, struct ifnet *ifp)
+{
+	struct hn_softc *sc = arg;
+	struct ifnet *hn_ifp;
+
+	HN_LOCK(sc);
+
+	hn_ifp = sc->hn_ifp;
+
+	if (hn_ifp == ifp || ifp->if_ioctl == hn_ioctl)
+		goto out;
+
+	if (bcmp(IF_LLADDR(ifp), IF_LLADDR(hn_ifp), ETHER_ADDR_LEN) != 0)
+		goto out;
+
+	if ((ifp->if_flags & IFF_UP) && !sc->switched_to_vf)
+		hn_nvs_switch_datapath(sc, ifp, true);
+	else if (!(ifp->if_flags & IFF_UP) && sc->switched_to_vf)
+		hn_nvs_switch_datapath(sc, ifp, false);
+out:
+	HN_UNLOCK(sc);
+}
+
 /* {F8615163-DF3E-46c5-913F-F2D2F965ED0E} */
 static const struct hyperv_guid g_net_vsc_device_type = {
 	.hv_guid = {0x63, 0x51, 0x61, 0xF8, 0x3E, 0xDF, 0xc5, 0x46,
@@ -1212,6 +1271,12 @@ hn_attach(device_t dev)
 	sc->hn_mgmt_taskq = sc->hn_mgmt_taskq0;
 	hn_update_link_status(sc);
 
+	sc->ifnet_event_hndl_tag = EVENTHANDLER_REGISTER(ifnet_event,
+	    hn_nvs_ifnet_event, sc, EVENTHANDLER_PRI_ANY);
+
+	sc->ifaddr_event_hndl_tag = EVENTHANDLER_REGISTER(ifaddr_event,
+	    hn_nvs_ifaddr_event, sc, EVENTHANDLER_PRI_ANY);
+
 	return (0);
 failed:
 	if (sc->hn_flags & HN_FLAG_SYNTH_ATTACHED)
@@ -1225,6 +1290,9 @@ hn_detach(device_t dev)
 {
 	struct hn_softc *sc = device_get_softc(dev);
 	struct ifnet *ifp = sc->hn_ifp;
+
+	EVENTHANDLER_DEREGISTER(ifaddr_event, sc->ifaddr_event_hndl_tag);
+	EVENTHANDLER_DEREGISTER(ifnet_event, sc->ifnet_event_hndl_tag);
 
 	if (sc->hn_xact != NULL && vmbus_chan_is_revoked(sc->hn_prichan)) {
 		/*
@@ -2116,19 +2184,23 @@ hn_rxpkt(struct hn_rx_ring *rxr, const void *data, int dlen,
     const struct hn_rxinfo *info)
 {
 	struct ifnet *ifp = rxr->hn_ifp;
+	struct ifnet *vf_ifp = rxr->vf_ifp;
 	struct mbuf *m_new;
 	int size, do_lro = 0, do_csum = 1;
 	int hash_type;
 
+#if 0
 	if (!(ifp->if_drv_flags & IFF_DRV_RUNNING))
 		return (0);
+#endif
 
 	/*
 	 * Bail out if packet contains more data than configured MTU.
 	 */
+/*
 	if (dlen > (ifp->if_mtu + ETHER_HDR_LEN)) {
 		return (0);
-	} else if (dlen <= MHLEN) {
+	} else*/ if (dlen <= MHLEN) {
 		m_new = m_gethdr(M_NOWAIT, MT_DATA);
 		if (m_new == NULL) {
 			if_inc_counter(ifp, IFCOUNTER_IQDROPS, 1);
@@ -2158,7 +2230,8 @@ hn_rxpkt(struct hn_rx_ring *rxr, const void *data, int dlen,
 
 		hv_m_append(m_new, dlen, data);
 	}
-	m_new->m_pkthdr.rcvif = ifp;
+
+	m_new->m_pkthdr.rcvif = vf_ifp ? vf_ifp : ifp;
 
 	if (__predict_false((ifp->if_capenable & IFCAP_RXCSUM) == 0))
 		do_csum = 0;
@@ -2306,6 +2379,9 @@ skip:
 	}
 	M_HASHTYPE_SET(m_new, hash_type);
 
+	if (vf_ifp != NULL)
+		do_lro = 0;
+
 	/*
 	 * Note:  Moved RX completion back to hv_nv_on_receive() so all
 	 * messages (not just data messages) will trigger a response.
@@ -2327,6 +2403,10 @@ skip:
 		}
 #endif
 	}
+
+	/* Inject the packet into the VF interface. */
+	if (vf_ifp != NULL)
+		ifp = vf_ifp;
 
 	/* We're not holding the lock here, so don't release it */
 	(*ifp->if_input)(ifp, m_new);

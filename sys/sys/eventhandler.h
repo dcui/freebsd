@@ -277,4 +277,11 @@ typedef void (*ada_probe_veto_fn)(void *, struct cam_path *,
     struct ata_params *, int *);
 EVENTHANDLER_DECLARE(ada_probe_veto, ada_probe_veto_fn);
 
+/* ifup/ifdown events */
+#define IFNET_EVENT_UP		0
+#define IFNET_EVENT_DOWN	1
+struct ifnet;
+typedef void (*ifnet_event_fn)(void *, struct ifnet *ifp, int event);
+EVENTHANDLER_DECLARE(ifnet_event, ifnet_event_fn);
+
 #endif /* _SYS_EVENTHANDLER_H_ */
