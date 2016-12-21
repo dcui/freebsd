@@ -1649,6 +1649,9 @@ int mlx4_en_alloc_resources(struct mlx4_en_priv *priv)
 	int i;
 	int node = 0;
 
+        /* Re-create stat sysctls in case the number of rings changed. */
+	mlx4_en_sysctl_stat(priv);
+
 	/* Create rx Rings */
 	for (i = 0; i < priv->rx_ring_num; i++) {
 		if (mlx4_en_create_cq(priv, &priv->rx_cq[i],
@@ -1676,8 +1679,6 @@ int mlx4_en_alloc_resources(struct mlx4_en_priv *priv)
 	if (!priv->dev->rx_cpu_rmap)
 		goto err;
 #endif
-        /* Re-create stat sysctls in case the number of rings changed. */
-	mlx4_en_sysctl_stat(priv);
 	return 0;
 
 err:
