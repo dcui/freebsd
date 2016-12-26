@@ -59,6 +59,7 @@ struct hn_tx_ring;
 
 struct hn_rx_ring {
 	struct ifnet	*hn_ifp;
+	struct vmbus_channel *hn_chan;
 	struct hn_tx_ring *hn_txr;
 	void		*hn_pktbuf;
 	int		hn_pktbuf_len;
