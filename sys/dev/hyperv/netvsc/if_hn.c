@@ -335,7 +335,7 @@ static void			hn_link_status(struct hn_softc *);
 static int			hn_create_rx_data(struct hn_softc *, int);
 static void			hn_destroy_rx_data(struct hn_softc *);
 static int			hn_check_iplen(const struct mbuf *, int);
-static int			hn_set_rxfilter(struct hn_softc *);
+//static int			hn_set_rxfilter(struct hn_softc *); FIXME...
 #ifndef RSS
 static int			hn_rss_reconfig(struct hn_softc *);
 #endif
@@ -685,7 +685,10 @@ do {							\
 }
 #endif	/* INET6 || INET */
 
-static int
+//FIXME: which healder should have this???
+int hn_set_rxfilter(struct hn_softc *sc);
+
+int
 hn_set_rxfilter(struct hn_softc *sc)
 {
 	struct ifnet *ifp = sc->hn_ifp;
@@ -704,6 +707,12 @@ hn_set_rxfilter(struct hn_softc *sc)
 		if ((ifp->if_flags & IFF_ALLMULTI) ||
 		    !TAILQ_EMPTY(&ifp->if_multiaddrs))
 			filter |= NDIS_PACKET_TYPE_ALL_MULTICAST;
+	}
+
+	if (sc->switched_to_vf) {
+		hn_rndis_set_rxfilter(sc, NDIS_PACKET_TYPE_PROMISCUOUS);
+		sc->hn_rx_filter = filter;
+		return (0);
 	}
 
 	if (sc->hn_rx_filter != filter) {

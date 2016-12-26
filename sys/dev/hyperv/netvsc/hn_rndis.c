@@ -784,6 +784,9 @@ hn_rndis_set_rxfilter(struct hn_softc *sc, uint32_t filter)
 {
 	int error;
 
+	if (sc->switched_to_vf)
+		filter = NDIS_PACKET_TYPE_PROMISCUOUS;
+
 	error = hn_rndis_set(sc, OID_GEN_CURRENT_PACKET_FILTER,
 	    &filter, sizeof(filter));
 	if (error) {

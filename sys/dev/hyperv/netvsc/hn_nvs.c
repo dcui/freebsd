@@ -46,6 +46,7 @@ __FBSDID("$FreeBSD$");
 #include <net/if.h>
 #include <net/if_var.h>
 #include <net/if_media.h>
+#include <net/rndis.h>
 
 #include <netinet/in.h>
 #include <netinet/tcp_lro.h>
@@ -59,6 +60,7 @@ __FBSDID("$FreeBSD$");
 #include <dev/hyperv/netvsc/if_hnreg.h>
 #include <dev/hyperv/netvsc/if_hnvar.h>
 #include <dev/hyperv/netvsc/hn_nvs.h>
+#include <dev/hyperv/netvsc/hn_rndis.h>
 
 static int			hn_nvs_conn_chim(struct hn_softc *);
 static int			hn_nvs_conn_rxbuf(struct hn_softc *);
@@ -757,20 +759,26 @@ hn_nvs_update_vf_if(struct hn_softc *sc, struct ifnet *vf)
 	}
 }
 
+int hn_set_rxfilter(struct hn_softc *sc); //FIXME...
 void
 hn_nvs_switch_datapath(struct hn_softc *sc, struct ifnet *ifp, bool vf)
 {
 	struct hn_nvs_sriov_init iov;
 	struct ifnet *hn_ifp = sc->hn_ifp;
 
+	if (vf)
+		hn_rndis_set_rxfilter(sc, NDIS_PACKET_TYPE_PROMISCUOUS);
+
 	memset(&iov, 0, sizeof(iov));
 	iov.nvs_type = HN_NVS_TYPE_SET_DATAPATH;
 	iov.nvs_active_path = vf ? HN_NVS_DATAPATH_VF :
 	    HN_NVS_DATAPATH_SYNTHETIC;
-
 	hn_nvs_req_send(sc, &iov, sizeof(iov));
 
 	sc->switched_to_vf = vf;
+
+	if (!vf && (ifp->if_drv_flags & IFF_DRV_RUNNING))
+		hn_set_rxfilter(sc);
 
 	if (bootverbose)
 		if_printf(hn_ifp, "Data path is switched %s %s\n",
