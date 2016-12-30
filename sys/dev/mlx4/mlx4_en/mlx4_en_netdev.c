@@ -2142,6 +2142,8 @@ int mlx4_en_init_netdev(struct mlx4_en_dev *mdev, int port,
 	priv->stride = roundup_pow_of_two(sizeof(struct mlx4_en_rx_desc) +
 					  DS_SIZE);
 
+	sysctl_ctx_init(&priv->conf_ctx);
+	sysctl_ctx_init(&priv->stat_ctx);
 	mlx4_en_sysctl_conf(priv);
 
 	err = mlx4_en_alloc_resources(priv);
@@ -2572,7 +2574,6 @@ static void mlx4_en_sysctl_conf(struct mlx4_en_priv *priv)
         ctx = &priv->conf_ctx;
 	pnameunit = device_get_nameunit(priv->mdev->pdev->dev.bsddev);
 
-        sysctl_ctx_init(ctx);
         priv->sysctl = SYSCTL_ADD_NODE(ctx, SYSCTL_STATIC_CHILDREN(_hw),
             OID_AUTO, dev->if_xname, CTLFLAG_RD, 0, "mlx4 10gig ethernet");
         node = SYSCTL_ADD_NODE(ctx, SYSCTL_CHILDREN(priv->sysctl), OID_AUTO,
@@ -2648,7 +2649,6 @@ static void mlx4_en_sysctl_stat(struct mlx4_en_priv *priv)
 	int i;
 
 	ctx = &priv->stat_ctx;
-	sysctl_ctx_init(ctx);
 	node = SYSCTL_ADD_NODE(ctx, SYSCTL_CHILDREN(priv->sysctl), OID_AUTO,
 	    "stat", CTLFLAG_RD, NULL, "Statistics");
 	node_list = SYSCTL_CHILDREN(node);
