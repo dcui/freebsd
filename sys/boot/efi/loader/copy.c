@@ -53,7 +53,7 @@ efi_verify_staging_size(unsigned long *nr_pages)
 	UINT32 dver;
 	EFI_STATUS status;
 	int i, ndesc;
-	unsigned long available_pages;
+	//unsigned long available_pages;
 
 	sz = 0;
 	status = BS->GetMemoryMap(&sz, 0, &key, &dsz, &dver);
@@ -76,6 +76,17 @@ efi_verify_staging_size(unsigned long *nr_pages)
 		start = p->PhysicalStart;
 		end = start + p->NumberOfPages * EFI_PAGE_SIZE;
 
+		printf("dexuan: i=%d, t=%d, attr=%jx, s/v=%jx, %jx, nr=%jx\n",
+			i, p->Type, p->Attribute,
+			(uintmax_t)p->PhysicalStart,
+			(uintmax_t)p->VirtualStart,
+			(uintmax_t)p->NumberOfPages);
+		if ((i+1) % 5 == 0) {
+			printf("dexuan: take a screenshot. will dump more in 10s\n");
+			delay(10000000); /* sleep 10 seconds */
+		}
+
+#if 0
 		if (KERNEL_PHYSICAL_BASE < start ||
 		    KERNEL_PHYSICAL_BASE >= end)
 			continue;
@@ -93,7 +104,10 @@ efi_verify_staging_size(unsigned long *nr_pages)
 		}
 
 		break;
+#endif
 	}
+	printf("dexuan: dumping mem map is done. Booting in 10s\n");
+	delay(10000000); /* sleep 10 seconds */
 
 out:
 	free(map);
