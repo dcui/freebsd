@@ -95,7 +95,7 @@ efi_verify_staging_size(unsigned long *nr_pages)
 	for ( ; i < ndesc;
 	     i++, p = NextMemoryDescriptor(p, dsz)) {
 		if (p->Type != EfiConventionalMemory &&
-		    p->Type != EfiLoaderData)
+		    p->Type != EfiLoaderData && p->Type != EfiBootServicesCode)
 			break;
 
 		if (p->PhysicalStart != end)
