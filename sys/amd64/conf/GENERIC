@@ -161,6 +161,9 @@ device		aacraid			# Adaptec by PMC RAID
 device		ida			# Compaq Smart RAID
 device		mfi			# LSI MegaRAID SAS
 device		mlx			# Mylex DAC960 family
+
+options COMPAT_LINUXKPI
+
 device		mrsas			# LSI/Avago MegaRAID SAS/SATA, 6Gb/s and 12Gb/s
 device		pmspcv			# PMC-Sierra SAS/SATA Controller driver
 #XXX pointer/int warnings
