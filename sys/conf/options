@@ -908,3 +908,5 @@ RCTL		opt_global.h
 # defined, this option will suffice in overriding what Redboot says.
 AR71XX_REALMEM    opt_global.h
 
+# Hyper-V network driver
+HN_DEBUG	opt_hn.h
