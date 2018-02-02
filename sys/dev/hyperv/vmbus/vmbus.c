@@ -1232,6 +1232,7 @@ vmbus_get_eventtq_method(device_t bus, device_t dev __unused, int cpu)
 	return (VMBUS_PCPU_GET(sc, event_tq, cpu));
 }
 
+#if 0
 #ifdef NEW_PCIB
 #define VTPM_BASE_ADDR 0xfed40000
 #define FOUR_GB (1ULL << 32)
@@ -1373,6 +1374,7 @@ vmbus_free_mmio_res(device_t dev)
 	pcib_host_res_free(dev, &sc->vmbus_mmio_res);
 }
 #endif	/* NEW_PCIB */
+#endif
 
 static void
 vmbus_identify(driver_t *driver, device_t parent)
@@ -1418,8 +1420,10 @@ vmbus_doattach(struct vmbus_softc *sc)
 	if (sc->vmbus_flags & VMBUS_FLAG_ATTACHED)
 		return (0);
 
+#if 0
 #ifdef NEW_PCIB
 	vmbus_get_mmio_res(sc->vmbus_dev);
+#endif
 #endif
 
 	sc->vmbus_flags |= VMBUS_FLAG_ATTACHED;
