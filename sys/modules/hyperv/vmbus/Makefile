@@ -10,7 +10,6 @@ SRCS=	hyperv.c \
 	vmbus.c \
 	vmbus_br.c \
 	vmbus_chan.c \
-	vmbus_et.c \
 	vmbus_if.c \
 	vmbus_res.c \
 	vmbus_xact.c

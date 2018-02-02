@@ -236,7 +236,6 @@ dev/hyperv/vmbus/hyperv_busdma.c			optional	hyperv
 dev/hyperv/vmbus/vmbus.c				optional	hyperv pci
 dev/hyperv/vmbus/vmbus_br.c				optional	hyperv
 dev/hyperv/vmbus/vmbus_chan.c				optional	hyperv
-dev/hyperv/vmbus/vmbus_et.c				optional	hyperv
 dev/hyperv/vmbus/vmbus_if.m				optional	hyperv
 dev/hyperv/vmbus/vmbus_res.c				optional	hyperv
 dev/hyperv/vmbus/vmbus_xact.c				optional	hyperv
