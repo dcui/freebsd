@@ -1274,8 +1274,13 @@ vmbus_chan_poll_task(void *xchan, int pending __unused)
 
 	KASSERT(chan->ch_poll_intvl != 0,
 	    ("chan%u: polling in interrupt mode", chan->ch_id));
+#if 0
 	callout_reset_sbt_curcpu(&chan->ch_poll_timeo, chan->ch_poll_intvl, 0,
 	    vmbus_chan_poll_timeout, chan, chan->ch_poll_flags);
+#else
+	callout_reset_curcpu(&chan->ch_poll_timeo, chan->ch_poll_intvl,
+	    vmbus_chan_poll_timeout, chan);
+#endif
 	chan->ch_cb(chan, chan->ch_cbarg);
 }
 
@@ -1284,13 +1289,21 @@ vmbus_chan_pollcfg_task(void *xarg, int pending __unused)
 {
 	const struct vmbus_chan_pollarg *arg = xarg;
 	struct vmbus_channel *chan = arg->poll_chan;
+#if 0
 	sbintime_t intvl;
+#else
+	uint32_t intvl;
+#endif
 	int poll_flags;
 
 	/*
 	 * Save polling interval.
 	 */
+#if 0
 	intvl = SBT_1S / arg->poll_hz;
+#else
+	intvl = arg->poll_hz;
+#endif
 	if (intvl == 0)
 		intvl = 1;
 	if (intvl == chan->ch_poll_intvl) {

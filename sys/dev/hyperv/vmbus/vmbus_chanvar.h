@@ -60,7 +60,11 @@ struct vmbus_channel {
 	struct taskqueue		*ch_tq;
 	struct task			ch_task;
 	struct task			ch_poll_task;
+#if 0
 	sbintime_t			ch_poll_intvl;
+#else
+	uint32_t			ch_poll_intvl;
+#endif
 	struct callout			ch_poll_timeo;
 	vmbus_chan_callback_t		ch_cb;
 	void				*ch_cbarg;
