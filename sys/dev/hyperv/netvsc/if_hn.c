@@ -225,10 +225,12 @@ struct hn_rxinfo {
 	uint32_t			hash_value;
 };
 
+#if 0
 struct hn_rxvf_setarg {
 	struct hn_rx_ring	*rxr;
 	struct ifnet		*vf_ifp;
 };
+#endif
 
 #define HN_RXINFO_VLAN			0x0001
 #define HN_RXINFO_CSUM			0x0002
@@ -268,6 +270,7 @@ static void			hn_ifnet_attevent(void *, struct ifnet *);
 static void			hn_ifnet_detevent(void *, struct ifnet *);
 static void			hn_ifnet_lnkevent(void *, struct ifnet *, int);
 
+#if 0
 static bool			hn_ismyvf(const struct hn_softc *,
 				    const struct ifnet *);
 static void			hn_rxvf_change(struct hn_softc *,
@@ -287,6 +290,7 @@ static void			hn_xpnt_vf_setenable(struct hn_softc *);
 static void			hn_xpnt_vf_setdisable(struct hn_softc *, bool);
 static void			hn_vf_rss_fixup(struct hn_softc *, bool);
 static void			hn_vf_rss_restore(struct hn_softc *);
+#endif
 
 static int			hn_rndis_rxinfo(const void *, int,
 				    struct hn_rxinfo *);
@@ -335,12 +339,14 @@ static int			hn_txagg_pkts_sysctl(SYSCTL_HANDLER_ARGS);
 static int			hn_txagg_pktmax_sysctl(SYSCTL_HANDLER_ARGS);
 static int			hn_txagg_align_sysctl(SYSCTL_HANDLER_ARGS);
 static int			hn_polling_sysctl(SYSCTL_HANDLER_ARGS);
+#if 0
 static int			hn_vf_sysctl(SYSCTL_HANDLER_ARGS);
 static int			hn_rxvf_sysctl(SYSCTL_HANDLER_ARGS);
 static int			hn_vflist_sysctl(SYSCTL_HANDLER_ARGS);
 static int			hn_vfmap_sysctl(SYSCTL_HANDLER_ARGS);
 static int			hn_xpnt_vf_accbpf_sysctl(SYSCTL_HANDLER_ARGS);
 static int			hn_xpnt_vf_enabled_sysctl(SYSCTL_HANDLER_ARGS);
+#endif
 
 static void			hn_stop(struct hn_softc *, bool);
 static void			hn_init_locked(struct hn_softc *);
@@ -473,10 +479,12 @@ static int			hn_enable_udp6cs = 1;
 SYSCTL_INT(_hw_hn, OID_AUTO, enable_udp6cs, CTLFLAG_RDTUN,
     &hn_enable_udp6cs, 0, "Offload UDP/IPv6 checksum");
 
+#if 0
 /* Stats. */
 static counter_u64_t		hn_udpcs_fixup;
 SYSCTL_COUNTER_U64(_hw_hn, OID_AUTO, udpcs_fixup, CTLFLAG_RW,
     &hn_udpcs_fixup, "# of UDP checksum fixup");
+#endif
 
 /*
  * See hn_set_hlen().
@@ -573,6 +581,7 @@ static int			hn_tx_agg_pkts = -1;
 SYSCTL_INT(_hw_hn, OID_AUTO, tx_agg_pkts, CTLFLAG_RDTUN,
     &hn_tx_agg_pkts, 0, "Packet transmission aggregation packet limit");
 
+#if 0
 /* VF list */
 SYSCTL_PROC(_hw_hn, OID_AUTO, vflist, CTLFLAG_RD | CTLTYPE_STRING,
     0, 0, hn_vflist_sysctl, "A", "VF list");
@@ -582,10 +591,13 @@ SYSCTL_PROC(_hw_hn, OID_AUTO, vfmap, CTLFLAG_RD | CTLTYPE_STRING,
     0, 0, hn_vfmap_sysctl, "A", "VF mapping");
 
 /* Transparent VF */
-static int			hn_xpnt_vf = 1;
+//static int			hn_xpnt_vf = 1;
+#endif
+static int			hn_xpnt_vf = 0;
 SYSCTL_INT(_hw_hn, OID_AUTO, vf_transparent, CTLFLAG_RDTUN,
     &hn_xpnt_vf, 0, "Transparent VF mod");
 
+#if 0
 /* Accurate BPF support for Transparent VF */
 static int			hn_xpnt_vf_accbpf = 0;
 SYSCTL_INT(_hw_hn, OID_AUTO, vf_xpnt_accbpf, CTLFLAG_RDTUN,
@@ -596,13 +608,16 @@ static int			hn_xpnt_vf_attwait = HN_XPNT_VF_ATTWAIT_MIN;
 SYSCTL_INT(_hw_hn, OID_AUTO, vf_xpnt_attwait, CTLFLAG_RWTUN,
     &hn_xpnt_vf_attwait, 0,
     "Extra wait for transparent VF attach routing; unit: seconds");
+#endif
 
 static u_int			hn_cpu_index;	/* next CPU for channel */
 static struct taskqueue		**hn_tx_taskque;/* shared TX taskqueues */
 
+#if 0
 static struct rmlock		hn_vfmap_lock;
 static int			hn_vfmap_size;
 static struct ifnet		**hn_vfmap;
+#endif
 
 static const uint8_t
 hn_rss_key_default[NDIS_HASH_KEYSIZE_TOEPLITZ] = {
@@ -839,7 +854,7 @@ hn_set_hlen(struct mbuf *m_head)
 		    (ntohs(ip->ip_off) & IP_DF) == 0) {
 			uint16_t off = ehlen + iphlen;
 
-			counter_u64_add(hn_udpcs_fixup, 1);
+			//counter_u64_add(hn_udpcs_fixup, 1);
 			PULLUP_HDR(m_head, off + sizeof(struct udphdr));
 			*(uint16_t *)(m_head->m_data + off +
                             m_head->m_pkthdr.csum_data) = in_cksum_skip(
@@ -1106,6 +1121,7 @@ hn_ifmedia_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
 	ifmr->ifm_active |= IFM_10G_T | IFM_FDX;
 }
 
+#if 0
 static void
 hn_rxvf_set_task(void *xarg, int pending __unused)
 {
@@ -1387,6 +1403,7 @@ hn_xpnt_vf_input(struct ifnet *vf_ifp, struct mbuf *m)
 		}
 	}
 }
+#endif
 
 static void
 hn_mtu_change_fixup(struct hn_softc *sc)
@@ -1461,6 +1478,7 @@ hn_rss_mbuf_hash(struct hn_softc *sc, uint32_t mbuf_hash)
 		sc->hn_rx_ring[i].hn_mbuf_hash = mbuf_hash;
 }
 
+#if 0
 static void
 hn_vf_rss_fixup(struct hn_softc *sc, bool reconf)
 {
@@ -2051,6 +2069,7 @@ hn_ifnet_lnkevent(void *xsc, struct ifnet *ifp, int link_state)
 	if (sc->hn_vf_ifp == ifp)
 		if_link_state_change(sc->hn_ifp, link_state);
 }
+#endif
 
 static int
 hn_probe(device_t dev)
@@ -2077,9 +2096,12 @@ hn_attach(device_t dev)
 	sc->hn_dev = dev;
 	sc->hn_prichan = vmbus_get_channel(dev);
 	HN_LOCK_INIT(sc);
+#if 0
 	rm_init(&sc->hn_vf_lock, "hnvf");
 	if (hn_xpnt_vf && hn_xpnt_vf_accbpf)
 		sc->hn_xvf_flags |= HN_XVFFLAG_ACCBPF;
+#endif
+
 
 	/*
 	 * Initialize these tunables once.
@@ -2119,6 +2141,7 @@ hn_attach(device_t dev)
 	TIMEOUT_TASK_INIT(sc->hn_mgmt_taskq0, &sc->hn_netchg_status, 0,
 	    hn_netchg_status_taskfunc, sc);
 
+#if 0
 	if (hn_xpnt_vf) {
 		/*
 		 * Setup taskqueue for VF tasks, e.g. delayed VF bringing up.
@@ -2130,6 +2153,7 @@ hn_attach(device_t dev)
 		TIMEOUT_TASK_INIT(sc->hn_vf_taskq, &sc->hn_vf_init, 0,
 		    hn_xpnt_vf_init_taskfunc, sc);
 	}
+#endif
 
 	/*
 	 * Allocate ifnet and setup its name earlier, so that if_printf
@@ -2310,6 +2334,7 @@ hn_attach(device_t dev)
 	    CTLTYPE_UINT | CTLFLAG_RW | CTLFLAG_MPSAFE, sc, 0,
 	    hn_polling_sysctl, "I",
 	    "Polling frequency: [100,1000000], 0 disable polling");
+#if 0
 	SYSCTL_ADD_PROC(ctx, child, OID_AUTO, "vf",
 	    CTLTYPE_STRING | CTLFLAG_RD | CTLFLAG_MPSAFE, sc, 0,
 	    hn_vf_sysctl, "A", "Virtual Function's name");
@@ -2327,6 +2352,7 @@ hn_attach(device_t dev)
 		    hn_xpnt_vf_accbpf_sysctl, "I",
 		    "Accurate BPF for transparent VF");
 	}
+#endif
 
 	/*
 	 * Setup the ifmedia, which has been initialized earlier.
@@ -2429,7 +2455,7 @@ hn_attach(device_t dev)
 	 */
 	sc->hn_mgmt_taskq = sc->hn_mgmt_taskq0;
 	hn_update_link_status(sc);
-
+#if 0
 	if (!hn_xpnt_vf) {
 		sc->hn_ifnet_evthand = EVENTHANDLER_REGISTER(ifnet_event,
 		    hn_ifnet_event, sc, EVENTHANDLER_PRI_ANY);
@@ -2439,6 +2465,7 @@ hn_attach(device_t dev)
 		sc->hn_ifnet_lnkhand = EVENTHANDLER_REGISTER(ifnet_link_event,
 		    hn_ifnet_lnkevent, sc, EVENTHANDLER_PRI_ANY);
 	}
+#endif
 
 	/*
 	 * NOTE:
@@ -7410,6 +7437,7 @@ hn_sysinit(void *arg __unused)
 {
 	int i;
 
+#if 0
 	hn_udpcs_fixup = counter_u64_alloc(M_WAITOK);
 
 #ifdef HN_IFSTART_SUPPORT
@@ -7437,6 +7465,7 @@ hn_sysinit(void *arg __unused)
 	hn_vfmap_size = HN_VFMAP_SIZE_DEF;
 	hn_vfmap = malloc(sizeof(struct ifnet *) * hn_vfmap_size, M_DEVBUF,
 	    M_WAITOK | M_ZERO);
+#endif
 
 	/*
 	 * Fix the # of TX taskqueues.
@@ -7488,10 +7517,12 @@ hn_sysuninit(void *arg __unused)
 		free(hn_tx_taskque, M_DEVBUF);
 	}
 
+#if 0
 	if (hn_vfmap != NULL)
 		free(hn_vfmap, M_DEVBUF);
 	rm_destroy(&hn_vfmap_lock);
 
 	counter_u64_free(hn_udpcs_fixup);
+#endif
 }
 SYSUNINIT(hn_sysuninit, SI_SUB_DRIVERS, SI_ORDER_SECOND, hn_sysuninit, NULL);

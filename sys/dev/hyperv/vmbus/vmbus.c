@@ -267,7 +267,8 @@ vmbus_msghc_dataptr(struct vmbus_msghc *mh)
 int
 vmbus_msghc_exec_noresult(struct vmbus_msghc *mh)
 {
-	sbintime_t time = SBT_1MS;
+	//sbintime_t time = SBT_1MS;
+	uint32_t time = 1;
 	struct hypercall_postmsg_in *inprm;
 	bus_addr_t inprm_paddr;
 	int i;
@@ -299,8 +300,13 @@ vmbus_msghc_exec_noresult(struct vmbus_msghc *mh)
 		if (status == HYPERCALL_STATUS_SUCCESS)
 			return 0;
 
+#if 0
 		pause_sbt("hcpmsg", time, 0, C_HARDCLOCK);
 		if (time < SBT_1S * 2)
+#else
+		pause("hcpmsg", time);
+		if (time < hz * 2)
+#endif
 			time *= 2;
 
 		/* Restore input parameter and try again */
@@ -1569,8 +1575,10 @@ vmbus_detach(device_t dev)
 	mtx_destroy(&sc->vmbus_prichan_lock);
 	mtx_destroy(&sc->vmbus_chan_lock);
 
+#if 0
 #ifdef NEW_PCIB
 	vmbus_free_mmio_res(dev);
+#endif
 #endif
 
 	return (0);

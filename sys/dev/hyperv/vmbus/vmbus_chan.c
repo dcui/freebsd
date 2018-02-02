@@ -1291,11 +1291,11 @@ vmbus_chan_pollcfg_task(void *xarg, int pending __unused)
 	struct vmbus_channel *chan = arg->poll_chan;
 #if 0
 	sbintime_t intvl;
+
+	int poll_flags;
 #else
 	uint32_t intvl;
 #endif
-	int poll_flags;
-
 	/*
 	 * Save polling interval.
 	 */
@@ -1312,11 +1312,15 @@ vmbus_chan_pollcfg_task(void *xarg, int pending __unused)
 	}
 	chan->ch_poll_intvl = intvl;
 
+#if 0
 	/* Adjust callout flags. */
 	poll_flags = C_DIRECT_EXEC;
 	if (arg->poll_hz <= hz)
 		poll_flags |= C_HARDCLOCK;
 	chan->ch_poll_flags = poll_flags;
+#else
+	chan->ch_poll_flags = 0; /* not really used for now... */
+#endif
 
 	/*
 	 * Disconnect this channel from the channel map to make sure that

@@ -187,9 +187,11 @@ struct hn_softc {
 	int		hn_rx_ring_inuse;
 	struct hn_rx_ring *hn_rx_ring;
 
+#if 0
 	struct rmlock	hn_vf_lock;
 	struct ifnet	*hn_vf_ifp;	/* SR-IOV VF */
 	uint32_t	hn_xvf_flags;	/* transparent VF flags */
+#endif
 
 	int		hn_tx_ring_cnt;
 	int		hn_tx_ring_inuse;
@@ -250,6 +252,7 @@ struct hn_softc {
 	eventhandler_tag	hn_ifnet_dethand;
 	eventhandler_tag	hn_ifnet_lnkhand;
 
+#if 0
 	/*
 	 * Transparent VF delayed initialization.
 	 */
@@ -262,6 +265,7 @@ struct hn_softc {
 	 */
 	void			(*hn_vf_input)
 				(struct ifnet *, struct mbuf *);
+#endif
 	int			hn_saved_caps;
 	u_int			hn_saved_tsomax;
 	u_int			hn_saved_tsosegcnt;
