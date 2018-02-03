@@ -162,8 +162,8 @@ do {							\
 } while (0)
 #define HN_UNLOCK(sc)			sx_xunlock(&(sc)->hn_lock)
 
-#define HN_CSUM_IP_MASK			(CSUM_IP | CSUM_IP_TCP | CSUM_IP_UDP)
-#define HN_CSUM_IP6_MASK		(CSUM_IP6_TCP | CSUM_IP6_UDP)
+#define HN_CSUM_IP_MASK			(CSUM_IP | CSUM_TCP | CSUM_UDP)
+#define HN_CSUM_IP6_MASK		(CSUM_TCP_IPV6 | CSUM_UDP_IPV6)
 #define HN_CSUM_IP_HWASSIST(sc)		\
 	((sc)->hn_tx_ring[0].hn_csum_assist & HN_CSUM_IP_MASK)
 #define HN_CSUM_IP6_HWASSIST(sc)	\
@@ -526,6 +526,7 @@ DRIVER_MODULE(hn, vmbus, hn_driver, hn_devclass, 0, 0);
 MODULE_VERSION(hn, 1);
 MODULE_DEPEND(hn, vmbus, 1, 1, 1);
 
+#define if_inc_counter(a, b, c)
 #if __FreeBSD_version >= 1100099
 static void
 hn_set_lro_lenlim(struct hn_softc *sc, int lenlim)
@@ -641,7 +642,7 @@ hn_tso_fixup(struct mbuf *m_head)
 		ehlen = ETHER_HDR_LEN;
 
 #ifdef INET
-	if (m_head->m_pkthdr.csum_flags & CSUM_IP_TSO) {
+	if (m_head->m_pkthdr.csum_flags & CSUM_TSO) {
 		struct ip *ip;
 		int iphlen;
 
@@ -703,7 +704,7 @@ hn_check_tcpsyn(struct mbuf *m_head, int *tcpsyn)
 		ehlen = ETHER_HDR_LEN;
 
 #ifdef INET
-	if (m_head->m_pkthdr.csum_flags & CSUM_IP_TCP) {
+	if (m_head->m_pkthdr.csum_flags & CSUM_TCP) {
 		const struct ip *ip;
 		int iphlen;
 
@@ -953,6 +954,7 @@ hn_ifmedia_sts(struct ifnet *ifp, struct ifmediareq *ifmr)
 	ifmr->ifm_active |= IFM_10G_T | IFM_FDX;
 }
 
+#if 0
 static void
 hn_update_vf_task(void *arg, int pending __unused)
 {
@@ -1068,6 +1070,7 @@ hn_ifaddr_event(void *arg, struct ifnet *ifp)
 {
 	hn_set_vf(arg, ifp, ifp->if_flags & IFF_UP);
 }
+#endif
 
 /* {F8615163-DF3E-46c5-913F-F2D2F965ED0E} */
 static const struct hyperv_guid g_net_vsc_device_type = {
@@ -1354,7 +1357,7 @@ hn_attach(device_t dev)
 		ifp->if_capabilities |= IFCAP_TXCSUM_IPV6;
 	if (sc->hn_caps & HN_CAP_TSO4) {
 		ifp->if_capabilities |= IFCAP_TSO4;
-		ifp->if_hwassist |= CSUM_IP_TSO;
+		ifp->if_hwassist |= CSUM_TSO;
 	}
 	if (sc->hn_caps & HN_CAP_TSO6) {
 		ifp->if_capabilities |= IFCAP_TSO6;
@@ -1373,16 +1376,20 @@ hn_attach(device_t dev)
 
 	if (ifp->if_capabilities & (IFCAP_TSO6 | IFCAP_TSO4)) {
 		hn_set_tso_maxsize(sc, hn_tso_maxlen, ETHERMTU);
+#if 0
 		ifp->if_hw_tsomaxsegcount = HN_TX_DATA_SEGCNT_MAX;
 		ifp->if_hw_tsomaxsegsize = PAGE_SIZE;
+#endif
 	}
 
 	ether_ifattach(ifp, eaddr);
 
+#if 0
 	if ((ifp->if_capabilities & (IFCAP_TSO6 | IFCAP_TSO4)) && bootverbose) {
 		if_printf(ifp, "TSO segcnt %u segsz %u\n",
 		    ifp->if_hw_tsomaxsegcount, ifp->if_hw_tsomaxsegsize);
 	}
+#endif
 
 	/* Inform the upper layer about the long frame support. */
 	ifp->if_hdrlen = sizeof(struct ether_vlan_header);
@@ -1393,11 +1400,13 @@ hn_attach(device_t dev)
 	sc->hn_mgmt_taskq = sc->hn_mgmt_taskq0;
 	hn_update_link_status(sc);
 
+#if 0
 	sc->hn_ifnet_evthand = EVENTHANDLER_REGISTER(ifnet_event,
 	    hn_ifnet_event, sc, EVENTHANDLER_PRI_ANY);
 
 	sc->hn_ifaddr_evthand = EVENTHANDLER_REGISTER(ifaddr_event,
 	    hn_ifaddr_event, sc, EVENTHANDLER_PRI_ANY);
+#endif
 
 	return (0);
 failed:
@@ -1412,11 +1421,12 @@ hn_detach(device_t dev)
 {
 	struct hn_softc *sc = device_get_softc(dev);
 	struct ifnet *ifp = sc->hn_ifp;
-
+#if 0
 	if (sc->hn_ifaddr_evthand != NULL)
 		EVENTHANDLER_DEREGISTER(ifaddr_event, sc->hn_ifaddr_evthand);
 	if (sc->hn_ifnet_evthand != NULL)
 		EVENTHANDLER_DEREGISTER(ifnet_event, sc->hn_ifnet_evthand);
+#endif
 
 	if (sc->hn_xact != NULL && vmbus_chan_is_revoked(sc->hn_prichan)) {
 		/*
@@ -2011,7 +2021,7 @@ hn_encap(struct ifnet *ifp, struct hn_tx_ring *txr, struct hn_txdesc *txd,
 		pi_data = hn_rndis_pktinfo_append(pkt, HN_RNDIS_PKT_LEN,
 		    NDIS_LSO2_INFO_SIZE, NDIS_PKTINFO_TYPE_LSO);
 #ifdef INET
-		if (m_head->m_pkthdr.csum_flags & CSUM_IP_TSO) {
+		if (m_head->m_pkthdr.csum_flags & CSUM_TSO) {
 			*pi_data = NDIS_LSO2_INFO_MAKEIPV4(0,
 			    m_head->m_pkthdr.tso_segsz);
 		}
@@ -2030,7 +2040,7 @@ hn_encap(struct ifnet *ifp, struct hn_tx_ring *txr, struct hn_txdesc *txd,
 		pi_data = hn_rndis_pktinfo_append(pkt, HN_RNDIS_PKT_LEN,
 		    NDIS_TXCSUM_INFO_SIZE, NDIS_PKTINFO_TYPE_CSUM);
 		if (m_head->m_pkthdr.csum_flags &
-		    (CSUM_IP6_TCP | CSUM_IP6_UDP)) {
+		    (CSUM_TCP_IPV6 | CSUM_UDP_IPV6)) {
 			*pi_data = NDIS_TXCSUM_INFO_IPV6;
 		} else {
 			*pi_data = NDIS_TXCSUM_INFO_IPV4;
@@ -2038,10 +2048,10 @@ hn_encap(struct ifnet *ifp, struct hn_tx_ring *txr, struct hn_txdesc *txd,
 				*pi_data |= NDIS_TXCSUM_INFO_IPCS;
 		}
 
-		if (m_head->m_pkthdr.csum_flags & (CSUM_IP_TCP | CSUM_IP6_TCP))
+		if (m_head->m_pkthdr.csum_flags & (CSUM_TCP | CSUM_TCP_IPV6))
 			*pi_data |= NDIS_TXCSUM_INFO_TCPCS;
 		else if (m_head->m_pkthdr.csum_flags &
-		    (CSUM_IP_UDP | CSUM_IP6_UDP))
+		    (CSUM_UDP | CSUM_UDP_IPV6))
 			*pi_data |= NDIS_TXCSUM_INFO_UDPCS;
 	}
 
@@ -2678,9 +2688,9 @@ hn_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 		if (mask & IFCAP_TSO4) {
 			ifp->if_capenable ^= IFCAP_TSO4;
 			if (ifp->if_capenable & IFCAP_TSO4)
-				ifp->if_hwassist |= CSUM_IP_TSO;
+				ifp->if_hwassist |= CSUM_TSO;
 			else
-				ifp->if_hwassist &= ~CSUM_IP_TSO;
+				ifp->if_hwassist &= ~CSUM_TSO;
 		}
 		if (mask & IFCAP_TSO6) {
 			ifp->if_capenable ^= IFCAP_TSO6;
@@ -3186,7 +3196,11 @@ hn_hwassist_sysctl(SYSCTL_HANDLER_ARGS)
 	HN_LOCK(sc);
 	hwassist = sc->hn_ifp->if_hwassist;
 	HN_UNLOCK(sc);
+#if 0
 	snprintf(assist_str, sizeof(assist_str), "%b", hwassist, CSUM_BITS);
+#else
+	snprintf(assist_str, sizeof(assist_str), "FIXME: hn_hwassist_sysctl()");
+#endif
 	return sysctl_handle_string(oidp, assist_str, sizeof(assist_str), req);
 }
 
@@ -4051,13 +4065,13 @@ hn_fixup_tx_data(struct hn_softc *sc)
 	if (sc->hn_caps & HN_CAP_IPCS)
 		csum_assist |= CSUM_IP;
 	if (sc->hn_caps & HN_CAP_TCP4CS)
-		csum_assist |= CSUM_IP_TCP;
+		csum_assist |= CSUM_TCP;
 	if (sc->hn_caps & HN_CAP_UDP4CS)
-		csum_assist |= CSUM_IP_UDP;
+		csum_assist |= CSUM_UDP;
 	if (sc->hn_caps & HN_CAP_TCP6CS)
-		csum_assist |= CSUM_IP6_TCP;
+		csum_assist |= CSUM_TCP_IPV6;
 	if (sc->hn_caps & HN_CAP_UDP6CS)
-		csum_assist |= CSUM_IP6_UDP;
+		csum_assist |= CSUM_UDP_IPV6;
 	for (i = 0; i < sc->hn_tx_ring_cnt; ++i)
 		sc->hn_tx_ring[i].hn_csum_assist = csum_assist;
 
@@ -4406,7 +4420,7 @@ hn_transmit(struct ifnet *ifp, struct mbuf *m)
 		int tcpsyn = 0;
 
 		if (m->m_pkthdr.len < 128 &&
-		    (m->m_pkthdr.csum_flags & (CSUM_IP_TCP | CSUM_IP6_TCP)) &&
+		    (m->m_pkthdr.csum_flags & (CSUM_TCP | CSUM_TCP_IPV6)) &&
 		    (m->m_pkthdr.csum_flags & CSUM_TSO) == 0) {
 			m = hn_check_tcpsyn(m, &tcpsyn);
 			if (__predict_false(m == NULL)) {
@@ -5516,6 +5530,7 @@ hn_rndis_rx_data(struct hn_rx_ring *rxr, const void *data, int dlen)
 	info.vlan_info = HN_NDIS_VLAN_INFO_INVALID;
 	info.csum_info = HN_NDIS_RXCSUM_INFO_INVALID;
 	info.hash_info = HN_NDIS_HASH_INFO_INVALID;
+	info.hash_value = HN_NDIS_HASH_INFO_INVALID;
 	if (__predict_true(pktinfo_len != 0)) {
 		bool overlap;
 		int error;

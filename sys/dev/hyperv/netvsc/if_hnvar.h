@@ -274,7 +274,15 @@ do {						\
 #define HN_CAP_UDP4CS			0x0020
 #define HN_CAP_UDP6CS			0x0040
 #define HN_CAP_TSO4			0x0080
+#if 0
 #define HN_CAP_TSO6			0x0100
+/* It looks FreeBSD 9.3 doesn't support IPV6 TSO: in sys/mbuf.h we can
+ * see CSUM_TSO_IPV6 is commented out.
+ */
+#else
+#define HN_CAP_TSO6			0
+#define CSUM_IP6_TSO			0
+#endif
 #define HN_CAP_HASHVAL			0x0200
 
 /* Capability description for use with printf(9) %b identifier. */
