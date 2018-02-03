@@ -2307,7 +2307,11 @@ storvsc_io_done(struct hv_storvsc_request *reqp)
 	storvsc_free_request(sc, reqp);
 	mtx_unlock(&sc->hs_lock);
 
+#if 0
 	xpt_done_direct(ccb);
+#else
+	xpt_done(ccb);
+#endif
 }
 
 /**

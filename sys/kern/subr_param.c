@@ -159,7 +159,8 @@ static const char *const vm_guest_sysctl_names[] = {
 };
 CTASSERT(nitems(vm_guest_sysctl_names) - 1 == VM_LAST);
 
-#ifndef XEN
+//#ifndef XEN
+#if 0
 static const char *const vm_bnames[] = {
 	"QEMU",				/* QEMU */
 	"Plex86",			/* Plex86 */
@@ -217,10 +218,14 @@ detect_virtual(void)
 void
 init_param1(void)
 {
+#if 0
 #ifndef XEN
 	vm_guest = detect_virtual();
 #else
 	vm_guest = VM_GUEST_XEN;
+#endif
+#else
+	vm_guest = VM_GUEST_HV; //FIXME: add detection code...
 #endif
 	hz = -1;
 	TUNABLE_INT_FETCH("kern.hz", &hz);
