@@ -1,6 +1,5 @@
 # $FreeBSD$
 
-#SUBDIR = vmbus netvsc storvsc
-SUBDIR = vmbus storvsc
+SUBDIR = vmbus netvsc storvsc
 
 .include <bsd.subdir.mk>

@@ -227,9 +227,9 @@ dev/hwpmc/hwpmc_uncore.c	optional	hwpmc
 dev/hwpmc/hwpmc_piv.c		optional	hwpmc
 dev/hwpmc/hwpmc_tsc.c		optional	hwpmc
 dev/hwpmc/hwpmc_x86.c		optional	hwpmc
-#dev/hyperv/netvsc/hn_nvs.c				optional	hyperv
-#dev/hyperv/netvsc/hn_rndis.c				optional	hyperv
-#dev/hyperv/netvsc/if_hn.c				optional	hyperv
+dev/hyperv/netvsc/hn_nvs.c				optional	hyperv
+dev/hyperv/netvsc/hn_rndis.c				optional	hyperv
+dev/hyperv/netvsc/if_hn.c				optional	hyperv
 dev/hyperv/storvsc/hv_storvsc_drv_freebsd.c		optional	hyperv
 dev/hyperv/vmbus/hyperv.c				optional	hyperv
 dev/hyperv/vmbus/hyperv_busdma.c			optional	hyperv
