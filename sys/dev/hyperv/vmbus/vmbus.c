@@ -639,6 +639,7 @@ vmbus_handle_intr1(struct vmbus_softc *sc, struct trapframe *frame, int cpu)
 	 * TODO: move this to independent IDT vector.
 	 */
 	msg = msg_base + VMBUS_SINT_TIMER;
+#if 0
 	if (msg->msg_type == HYPERV_MSGTYPE_TIMER_EXPIRED) {
 		msg->msg_type = HYPERV_MSGTYPE_NONE;
 
@@ -664,6 +665,7 @@ vmbus_handle_intr1(struct vmbus_softc *sc, struct trapframe *frame, int cpu)
 			wrmsr(MSR_HV_EOM, 0);
 		}
 	}
+#endif
 
 	/*
 	 * Check events.  Hot path for network and storage I/O data; high rate.
