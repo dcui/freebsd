@@ -1876,8 +1876,10 @@ cam_periph_error(union ccb *ccb, cam_flags camflags,
 			 * Let peripheral drivers know that this
 			 * device has gone away.
 			 */
+#if 0
 			xpt_async(AC_LOST_DEVICE, newpath, NULL);
 			xpt_free_path(newpath);
+#endif
 		}
 	}
 
